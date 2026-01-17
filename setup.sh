@@ -32,8 +32,8 @@ fi
 
 # Установка зависимостей
 echo -e "${GREEN}📦 Устанавливаем зависимости...${NC}"
-pip install --upgrade pip
-pip install -r requirements.txt
+pip3 install --upgrade pip
+pip3 install -r requirements.txt
 echo -e "${GREEN}✅ Зависимости установлены${NC}"
 
 # Создание .env файла

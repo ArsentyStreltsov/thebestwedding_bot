@@ -39,7 +39,7 @@ source venv/bin/activate  # На Windows: venv\Scripts\activate
 
 3. Установите зависимости:
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 4. Создайте файл `.env` и заполните его (см. `.env.example`)
@@ -64,7 +64,7 @@ pip install -r requirements.txt
 ### Ручной запуск
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 ## База данных
@@ -126,14 +126,18 @@ thebestwedding_bot/
 ## Развертывание на Railway
 
 1. Подключите репозиторий к Railway
-2. Добавьте переменные окружения в настройках проекта:
-   - `BOT_TOKEN`
-   - `DATABASE_URL`
-   - `ADMIN_USER_IDS` (опционально)
+2. **Важно**: Файл `runtime.txt` уже настроен для использования Python 3.12 (совместим с asyncpg и pydantic)
+3. Добавьте переменные окружения в настройках проекта:
+   - `BOT_TOKEN` - токен вашего Telegram бота
+   - `DATABASE_URL` - используйте Variable Reference: `${{Postgres.DATABASE_URL}}` (рекомендуется)
+     или скопируйте обычный `DATABASE_URL` (не `DATABASE_PUBLIC_URL`) из сервиса Postgres
+   - `ADMIN_USER_IDS` - ID администраторов через запятую (опционально)
    - `DEBUG=False`
-3. Railway автоматически определит Python проект и установит зависимости
-4. Убедитесь, что PostgreSQL добавлен как сервис и `DATABASE_URL` настроен
-5. При первом запуске таблицы создадутся автоматически
+4. Railway автоматически определит Python проект и установит зависимости
+5. Убедитесь, что PostgreSQL добавлен как сервис
+6. При первом запуске таблицы создадутся автоматически
+
+**Примечание**: Если возникают проблемы с билдом, убедитесь, что файл `runtime.txt` присутствует в репозитории и содержит `python-3.12.7`
 
 ## Безопасность
 

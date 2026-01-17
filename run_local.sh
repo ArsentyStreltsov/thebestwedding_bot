@@ -61,7 +61,7 @@ fi
 if ! python3 -c "import aiogram" 2>/dev/null; then
     echo -e "${YELLOW}⚠️  Зависимости не установлены${NC}"
     echo -e "${GREEN}📦 Устанавливаем зависимости...${NC}"
-    pip install -r requirements.txt
+    pip3 install -r requirements.txt
     echo -e "${GREEN}✅ Зависимости установлены${NC}"
 fi
 

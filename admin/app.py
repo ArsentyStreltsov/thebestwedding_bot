@@ -383,9 +383,11 @@ async def push_send(
             # Добавляем московский часовой пояс
             moscow_time = local_time.replace(tzinfo=MOSCOW_TZ)
             # Конвертируем в UTC для хранения в БД
-            scheduled_time = moscow_time.astimezone(timezone.utc)
+            utc_time = moscow_time.astimezone(timezone.utc)
+            # Убираем timezone для сохранения в БД (asyncpg требует naive datetime)
+            scheduled_time = utc_time.replace(tzinfo=None)
             # Проверяем, не в прошлом ли время (в UTC)
-            if scheduled_time <= datetime.now(timezone.utc):
+            if scheduled_time <= datetime.utcnow():
                 scheduled_time = None
         except Exception as e:
             print(f"Ошибка парсинга времени: {e}")

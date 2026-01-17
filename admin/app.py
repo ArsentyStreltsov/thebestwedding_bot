@@ -2,13 +2,16 @@ from fastapi import FastAPI, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 from typing import Optional, List
 from admin.database import AdminDatabase
 from admin.auth import verify_password, get_password_hash, create_access_token, verify_token
 from admin.config import AdminConfig
 import httpx
+
+# Московское время (UTC+3)
+MOSCOW_TZ = timezone(timedelta(hours=3))
 
 app = FastAPI(title="Wedding Bot Admin Panel")
 templates = Jinja2Templates(directory="admin/templates")
@@ -320,11 +323,34 @@ async def pushes_page(request: Request):
     )
     users = await AdminDatabase.fetch("SELECT user_id, first_name, username FROM users")
     
+    # Конвертируем время из UTC в московское для отображения
+    pushes_list = []
+    for push in pushes:
+        push_dict = dict(push)
+        # Конвертируем scheduled_at из UTC в московское время
+        if push_dict.get("scheduled_at"):
+            if isinstance(push_dict["scheduled_at"], datetime):
+                if push_dict["scheduled_at"].tzinfo is None:
+                    # Если время без timezone, считаем его UTC
+                    utc_time = push_dict["scheduled_at"].replace(tzinfo=timezone.utc)
+                else:
+                    utc_time = push_dict["scheduled_at"].astimezone(timezone.utc)
+                push_dict["scheduled_at"] = utc_time.astimezone(MOSCOW_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        # Конвертируем sent_at из UTC в московское время
+        if push_dict.get("sent_at"):
+            if isinstance(push_dict["sent_at"], datetime):
+                if push_dict["sent_at"].tzinfo is None:
+                    utc_time = push_dict["sent_at"].replace(tzinfo=timezone.utc)
+                else:
+                    utc_time = push_dict["sent_at"].astimezone(timezone.utc)
+                push_dict["sent_at"] = utc_time.astimezone(MOSCOW_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        pushes_list.append(push_dict)
+    
     return templates.TemplateResponse(
         "pushes.html",
         {
             "request": request,
-            "pushes": [dict(p) for p in pushes],
+            "pushes": pushes_list,
             "users": [dict(u) for u in users]
         }
     )
@@ -351,12 +377,18 @@ async def push_send(
     scheduled_time = None
     if scheduled_at:
         try:
-            # Преобразуем локальное время в UTC
-            scheduled_time = datetime.fromisoformat(scheduled_at)
-            # Если время в прошлом, отправляем сразу
-            if scheduled_time <= datetime.now():
+            # Парсим время из формы (локальное время браузера, но без timezone)
+            # Предполагаем, что это московское время (UTC+3)
+            local_time = datetime.fromisoformat(scheduled_at.replace('Z', ''))
+            # Добавляем московский часовой пояс
+            moscow_time = local_time.replace(tzinfo=MOSCOW_TZ)
+            # Конвертируем в UTC для хранения в БД
+            scheduled_time = moscow_time.astimezone(timezone.utc)
+            # Проверяем, не в прошлом ли время (в UTC)
+            if scheduled_time <= datetime.now(timezone.utc):
                 scheduled_time = None
-        except:
+        except Exception as e:
+            print(f"Ошибка парсинга времени: {e}")
             scheduled_time = None
     
     # Если время не указано или в прошлом, отправляем сразу

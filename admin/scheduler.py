@@ -3,7 +3,7 @@
 Запускается отдельно или интегрируется в основной бот
 """
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from admin.database import AdminDatabase
 from admin.config import AdminConfig
 import httpx

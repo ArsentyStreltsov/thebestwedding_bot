@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Пуши{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Отправить пуш</h2>
+    <form method="POST" action="/pushes/send">
+        <label for="message">Сообщение:</label>
+        <textarea id="message" name="message" required placeholder="Введите текст сообщения..."></textarea>
+        
+        <label>
+            <input type="checkbox" id="send_to_all" name="send_to_all" value="true" checked onchange="toggleUserSelect()">
+            Отправить всем пользователям
+        </label>
+        
+        <div id="user_select" style="display: none; margin-top: 1rem;">
+            <label for="target_user_ids">ID пользователей (через запятую):</label>
+            <input type="text" id="target_user_ids" name="target_user_ids" placeholder="123456789, 987654321">
+            <small style="color: #6b7280;">Или выберите из списка ниже</small>
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #d1d5db; padding: 0.5rem; margin-top: 0.5rem; border-radius: 4px;">
+                {% for user in users %}
+                <label style="display: block; padding: 0.25rem;">
+                    <input type="checkbox" class="user-checkbox" value="{{ user.user_id }}" onchange="updateUserIds()">
+                    {{ user.first_name }} (@{{ user.username }}) - {{ user.user_id }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <label for="scheduled_at" style="margin-top: 1rem;">Запланировать на время (оставьте пустым для немедленной отправки):</label>
+        <input type="datetime-local" id="scheduled_at" name="scheduled_at">
+        
+        <button type="submit" class="btn">Отправить</button>
+    </form>
+</div>
+
+<div class="card">
+    <h2>История пушей</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Сообщение</th>
+                <th>Получатели</th>
+                <th>Запланировано</th>
+                <th>Отправлено</th>
+                <th>Статус</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for push in pushes %}
+            <tr>
+                <td>{{ push.id }}</td>
+                <td>{{ push.message[:50] }}{% if push.message|length > 50 %}...{% endif %}</td>
+                <td>{% if push.send_to_all %}Всем{% else %}Выборочно{% endif %}</td>
+                <td>{% if push.scheduled_at %}{{ push.scheduled_at }}{% else %}-{% endif %}</td>
+                <td>{% if push.sent_at %}{{ push.sent_at }}{% else %}-{% endif %}</td>
+                <td>{% if push.is_sent %}✅ Отправлено{% else %}⏳ Ожидает{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function toggleUserSelect() {
+    const checkbox = document.getElementById('send_to_all');
+    const userSelect = document.getElementById('user_select');
+    userSelect.style.display = checkbox.checked ? 'none' : 'block';
+}
+
+function updateUserIds() {
+    const checkboxes = document.querySelectorAll('.user-checkbox:checked');
+    const userIds = Array.from(checkboxes).map(cb => cb.value).join(', ');
+    document.getElementById('target_user_ids').value = userIds;
+}
+</script>
+{% endblock %}

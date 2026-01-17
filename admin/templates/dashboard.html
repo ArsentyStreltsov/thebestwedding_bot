@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+<div class="stats">
+    <div class="stat-card">
+        <h3>{{ users_count }}</h3>
+        <p>Пользователей</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ wishlist_count }}</h3>
+        <p>Товаров в виш-листе</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ info_count }}</h3>
+        <p>Разделов информации</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ pending_pushes }}</h3>
+        <p>Запланированных пушей</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Быстрые действия</h2>
+    <div style="margin-top: 1rem;">
+        <a href="/wishlist" class="btn">Управление виш-листом</a>
+        <a href="/info" class="btn" style="margin-left: 1rem;">Управление информацией</a>
+        <a href="/pushes" class="btn" style="margin-left: 1rem;">Отправить пуш</a>
+    </div>
+</div>
+{% endblock %}

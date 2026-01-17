@@ -6,6 +6,13 @@ from config import Config
 from database import Database, init_db
 from handlers import start_router, wishlist_router, info_router, contact_router
 
+# Импорт scheduler для запланированных пушей
+try:
+    from admin.scheduler import send_scheduled_pushes
+    SCHEDULER_AVAILABLE = True
+except ImportError:
+    SCHEDULER_AVAILABLE = False
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO if not Config.DEBUG else logging.DEBUG,
@@ -40,6 +47,11 @@ async def main():
         dp.include_router(contact_router)
         
         logger.info("Бот запущен и готов к работе")
+        
+        # Запуск фоновой задачи для отправки запланированных пушей
+        if SCHEDULER_AVAILABLE:
+            asyncio.create_task(send_scheduled_pushes())
+            logger.info("Scheduler для пушей запущен")
         
         # Запуск polling
         await dp.start_polling(bot, skip_updates=True)

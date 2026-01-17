@@ -84,4 +84,28 @@ async def init_db() -> None:
         )
     """)
     
+    # Таблица запланированных пушей
+    await Database.execute("""
+        CREATE TABLE IF NOT EXISTS scheduled_pushes (
+            id SERIAL PRIMARY KEY,
+            message TEXT NOT NULL,
+            send_to_all BOOLEAN DEFAULT TRUE,
+            target_user_ids BIGINT[],
+            scheduled_at TIMESTAMP,
+            sent_at TIMESTAMP,
+            is_sent BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Таблица админов для веб-админки
+    await Database.execute("""
+        CREATE TABLE IF NOT EXISTS admin_users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
     print("База данных успешно инициализирована")

@@ -46,8 +46,13 @@ BOT_TOKEN=your_bot_token_here
 # Database Configuration (PostgreSQL)
 DATABASE_URL=postgresql://user:password@localhost:5432/wedding_bot_db
 
-# Admin Configuration
+# Admin Configuration (для бота)
 ADMIN_USER_IDS=123456789,987654321
+
+# Admin Panel Configuration (для веб-админки)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your_admin_password_here
+SECRET_KEY=your-secret-key-change-this-to-random-string
 
 # Application Settings
 DEBUG=False

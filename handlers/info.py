@@ -17,7 +17,7 @@ async def info_handler(message: Message):
     buttons = []
     
     # Добавляем кнопку Apple Calendar только если URL установлен
-    if apple_calendar_url:
+    if apple_calendar_url and apple_calendar_url.strip():
         buttons.append(
             InlineKeyboardButton(
                 text="📱 Apple Calendar",

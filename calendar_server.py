@@ -71,10 +71,13 @@ def wedding_calendar():
     
     response = Response(
         ics_content,
-        mimetype='text/calendar',
+        mimetype='text/calendar; charset=utf-8',
         headers={
-            'Content-Disposition': 'attachment; filename=wedding.ics',
-            'Content-Type': 'text/calendar; charset=utf-8'
+            'Content-Type': 'text/calendar; charset=utf-8',
+            'Content-Disposition': 'inline; filename="wedding.ics"',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
         }
     )
     

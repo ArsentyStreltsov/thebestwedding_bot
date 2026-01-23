@@ -144,10 +144,9 @@ def get_apple_calendar_url() -> str:
     if not calendar_server_url:
         return ""
     
-    # Используем webcal:// протокол для более нативной интеграции с Apple Calendar
-    # На iOS/macOS это откроется напрямую в приложении календаря с предзаполненными данными
-    webcal_url = calendar_server_url.replace("https://", "webcal://")
-    return f"{webcal_url}/wedding.ics"
+    # На iOS/macOS https:// ссылка на .ics файл откроется напрямую в приложении календаря
+    # с предзаполненными данными благодаря правильным заголовкам сервера
+    return f"{calendar_server_url}/wedding.ics"
 
 
 def get_wishlist_empty_text() -> str:

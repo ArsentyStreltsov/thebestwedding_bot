@@ -31,7 +31,10 @@ logging.getLogger("asyncpg").setLevel(logging.WARNING)
 
 async def on_startup(bot: Bot) -> None:
     """Выполняется при запуске бота"""
-    webhook_url = f"{Config.WEBHOOK_HOST}{Config.WEBHOOK_PATH}"
+    # Убираем слеш в конце WEBHOOK_HOST, если он есть
+    host = Config.WEBHOOK_HOST.rstrip('/')
+    # Формируем правильный URL
+    webhook_url = f"{host}{Config.WEBHOOK_PATH}"
     await bot.set_webhook(
         webhook_url,
         secret_token=Config.WEBHOOK_SECRET if Config.WEBHOOK_SECRET else None
@@ -127,7 +130,8 @@ async def main():
         app.on_shutdown.append(shutdown_handler)
         
         logger.info(f"Веб-сервер запущен на порту {Config.WEBHOOK_PORT}")
-        logger.info(f"Webhook URL: {Config.WEBHOOK_HOST}{Config.WEBHOOK_PATH}")
+        host = Config.WEBHOOK_HOST.rstrip('/')
+        logger.info(f"Webhook URL: {host}{Config.WEBHOOK_PATH}")
         logger.info("Бот готов к работе через webhook")
         
         # Запуск веб-сервера внутри существующего event loop

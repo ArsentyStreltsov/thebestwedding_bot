@@ -36,7 +36,9 @@ class Config:
     
     # Webhook
     WEBHOOK_HOST: str = os.getenv("WEBHOOK_HOST", "")  # URL для webhook (например: https://your-app.railway.app)
-    WEBHOOK_PATH: str = os.getenv("WEBHOOK_PATH", "/webhook")  # Путь для webhook
+    # Путь для webhook (должен начинаться с / или быть пустым)
+    _webhook_path = os.getenv("WEBHOOK_PATH", "/webhook")
+    WEBHOOK_PATH: str = _webhook_path if _webhook_path.startswith("/") or _webhook_path == "" else f"/{_webhook_path}"
     WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "")  # Секретный ключ для webhook (опционально)
     # Порт для веб-сервера (Railway использует переменную PORT, локально - 8001)
     WEBHOOK_PORT: int = int(os.getenv("PORT", os.getenv("WEBHOOK_PORT", "8001")))

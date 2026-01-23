@@ -11,6 +11,11 @@ import httpx
 
 async def send_scheduled_pushes():
     """Проверка и отправка запланированных пушей"""
+    # Проверяем, что pool инициализирован
+    if AdminDatabase._pool is None:
+        print("⚠️  AdminDatabase не инициализирован, scheduler не будет работать")
+        return
+    
     while True:
         try:
             # Получаем пушы, которые нужно отправить

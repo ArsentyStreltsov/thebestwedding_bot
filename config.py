@@ -1,7 +1,12 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Загружаем .env.local для локальной разработки, если он существует
+# Иначе загружаем обычный .env (для продакшн)
+if os.path.exists(".env.local"):
+    load_dotenv(".env.local")
+else:
+    load_dotenv()
 
 
 class Config:
@@ -23,6 +28,19 @@ class Config:
     # Settings
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
     
+    # Video
+    VIDEO_FILE_ID: str = os.getenv("VIDEO_FILE_ID", "")  # file_id видео из Telegram
+    
+    # Calendar Server URL for .ics file
+    CALENDAR_SERVER_URL: str = os.getenv("CALENDAR_SERVER_URL", "")  # URL календарного сервера на Railway
+    
+    # Webhook
+    WEBHOOK_HOST: str = os.getenv("WEBHOOK_HOST", "")  # URL для webhook (например: https://your-app.railway.app)
+    WEBHOOK_PATH: str = os.getenv("WEBHOOK_PATH", "/webhook")  # Путь для webhook
+    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "")  # Секретный ключ для webhook (опционально)
+    # Порт для веб-сервера (Railway использует переменную PORT, локально - 8001)
+    WEBHOOK_PORT: int = int(os.getenv("PORT", os.getenv("WEBHOOK_PORT", "8001")))
+    
     @classmethod
     def validate(cls) -> bool:
         """Проверка наличия обязательных переменных окружения"""
@@ -30,4 +48,5 @@ class Config:
             raise ValueError("BOT_TOKEN не установлен в .env файле")
         if not cls.DATABASE_URL:
             raise ValueError("DATABASE_URL не установлен в .env файле")
+        # WEBHOOK_HOST обязателен только если не используется polling
         return True

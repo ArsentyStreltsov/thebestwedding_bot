@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from keyboards.main_menu import get_main_menu_keyboard
 from database.connection import Database
+from messages import get_welcome_message
 
 router = Router()
 
@@ -24,25 +25,19 @@ async def cmd_start(message: Message):
             updated_at = CURRENT_TIMESTAMP
     """, user.id, user.username, user.first_name, user.last_name)
     
-    welcome_text = (
-        f"Привет, {user.first_name}! 👋\n\n"
-        "Добро пожаловать на нашу свадьбу! 🎉\n\n"
-        "Здесь ты можешь найти всю полезную информацию о нашем торжестве, "
-        "посмотреть виш-лист и связаться с нами.\n\n"
-        "Выбери раздел из меню ниже:"
-    )
-    
     await message.answer(
-        welcome_text,
+        get_welcome_message(user.first_name or "друг"),
         reply_markup=get_main_menu_keyboard()
     )
 
 
-@router.message(F.text == "🔙 Главное меню")
+@router.message(F.text == "🏠 Главное меню")
 async def main_menu_handler(message: Message):
     """Обработчик возврата в главное меню"""
+    user = message.from_user
+    
     await message.answer(
-        "Выбери раздел из меню:",
+        get_welcome_message(user.first_name or "друг"),
         reply_markup=get_main_menu_keyboard()
     )
 
@@ -50,8 +45,10 @@ async def main_menu_handler(message: Message):
 @router.callback_query(F.data == "main_menu")
 async def main_menu_callback_handler(callback: CallbackQuery):
     """Обработчик возврата в главное меню через callback"""
+    user = callback.from_user
+    
     await callback.message.answer(
-        "Выбери раздел из меню:",
+        get_welcome_message(user.first_name or "друг"),
         reply_markup=get_main_menu_keyboard()
     )
     await callback.answer()

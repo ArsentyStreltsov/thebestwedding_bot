@@ -29,7 +29,9 @@ class Config:
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
     
     # Video
-    VIDEO_FILE_ID: str = os.getenv("VIDEO_FILE_ID", "")  # file_id видео из Telegram
+    VIDEO_FILE_ID: str = os.getenv("VIDEO_FILE_ID", "")  # file_id видео из Telegram (временный, для получения file_path)
+    VIDEO_FILE_PATH: str = os.getenv("VIDEO_FILE_PATH", "")  # file_path из Telegram Bot API (постоянный, приоритет #1)
+    VIDEO_URL: str = os.getenv("VIDEO_URL", "")  # Внешний URL видео (приоритет #2, если VIDEO_FILE_PATH не указан)
     
     # Calendar Server URL for .ics file
     CALENDAR_SERVER_URL: str = os.getenv("CALENDAR_SERVER_URL", "")  # URL календарного сервера на Railway

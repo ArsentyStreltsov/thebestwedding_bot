@@ -18,15 +18,17 @@ except ImportError:
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.INFO if not Config.DEBUG else logging.DEBUG,
+    level=logging.ERROR if not Config.DEBUG else logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%H:%M:%S"
 )
 logger = logging.getLogger(__name__)
 
-# Уменьшаем уровень логирования для некоторых библиотек
-logging.getLogger("aiogram").setLevel(logging.WARNING)
-logging.getLogger("asyncpg").setLevel(logging.WARNING)
+# Уменьшаем уровень логирования для библиотек
+logging.getLogger("aiogram").setLevel(logging.ERROR)
+logging.getLogger("asyncpg").setLevel(logging.ERROR)
+logging.getLogger("aiohttp").setLevel(logging.ERROR)
+logging.getLogger("aiohttp.access").setLevel(logging.ERROR)
 
 
 async def on_startup(bot: Bot) -> None:
@@ -39,20 +41,17 @@ async def on_startup(bot: Bot) -> None:
         webhook_url,
         secret_token=Config.WEBHOOK_SECRET if Config.WEBHOOK_SECRET else None
     )
-    logger.info(f"Webhook установлен: {webhook_url}")
 
 
 async def on_shutdown(bot: Bot) -> None:
     """Выполняется при остановке бота"""
     await bot.session.close()
-    logger.info("Webhook удалён, сессия закрыта")
 
 
 async def init_bot():
     """Инициализация бота и диспетчера"""
     # Валидация конфигурации
     Config.validate()
-    logger.info("Конфигурация загружена успешно")
     
     # Проверка наличия WEBHOOK_HOST
     if not Config.WEBHOOK_HOST:
@@ -60,11 +59,9 @@ async def init_bot():
     
     # Инициализация базы данных
     await Database.create_pool()
-    logger.info("Подключение к базе данных установлено")
     
     # Создание таблиц
     await init_db()
-    logger.info("Таблицы базы данных проверены/созданы")
     
     # Инициализация бота и диспетчера
     bot = Bot(token=Config.BOT_TOKEN)
@@ -87,7 +84,6 @@ async def init_bot():
             AdminConfig.validate()
             await AdminDatabase.create_pool()
             asyncio.create_task(send_scheduled_pushes())
-            logger.info("Scheduler для пушей запущен")
         except Exception as e:
             logger.warning(f"Scheduler не запущен: {e}")
     
@@ -129,18 +125,14 @@ async def main():
         app.on_startup.append(startup_handler)
         app.on_shutdown.append(shutdown_handler)
         
-        logger.info(f"Веб-сервер запущен на порту {Config.WEBHOOK_PORT}")
-        host = Config.WEBHOOK_HOST.rstrip('/')
-        logger.info(f"Webhook URL: {host}{Config.WEBHOOK_PATH}")
-        logger.info("Бот готов к работе через webhook")
-        
         # Запуск веб-сервера внутри существующего event loop
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "0.0.0.0", Config.WEBHOOK_PORT)
         await site.start()
         
-        logger.info("Веб-сервер успешно запущен")
+        # Логируем только запуск бота
+        logger.info("🤖 Бот запущен и готов к работе")
         
         # Ожидаем бесконечно (сервер работает)
         try:
@@ -151,7 +143,7 @@ async def main():
             await runner.cleanup()
         
     except KeyboardInterrupt:
-        logger.info("Получен сигнал остановки")
+        pass
     except Exception as e:
         error_msg = str(e)
         # Показываем только краткую информацию об ошибке
@@ -174,7 +166,7 @@ async def main():
                     await AdminDatabase.close_pool()
                 except:
                     pass
-            logger.info("Подключения закрыты")
+            pass
         except:
             pass
 

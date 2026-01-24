@@ -5,7 +5,13 @@ from html import escape
 from keyboards.main_menu import get_main_menu_keyboard
 from keyboards.wishlist import get_wishlist_keyboard, get_wishlist_item_keyboard
 from database.connection import Database
-from messages import get_wishlist_intro, get_wishlist_select_item_text
+from messages import (
+    get_wishlist_intro,
+    get_wishlist_select_item_text,
+    get_wishlist_how_it_works_text,
+    get_wishlist_logistics_text,
+    get_wishlist_empty_text,
+)
 
 router = Router()
 
@@ -55,8 +61,34 @@ def _format_links_block(link: Optional[str], link2: Optional[str]) -> str:
 
 @router.message(F.text == "🎁 Вишлист")
 async def wishlist_handler(message: Message):
-    """Обработчик раздела виш-листа"""
-    items = await Database.fetch("""
+    """Обработчик раздела виш-листа (первый экран с двумя кнопками)"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📝 Открыть вишлист",
+                    callback_data="wishlist_open",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✈️ Информация по логистике",
+                    callback_data="wishlist_logistics",
+                )
+            ],
+        ]
+    )
+    await message.answer(
+        get_wishlist_intro(),
+        reply_markup=keyboard,
+    )
+
+
+@router.callback_query(F.data == "wishlist_open")
+async def wishlist_open_handler(callback: CallbackQuery):
+    """Открытие списка подарков с объяснением, как работает вишлист"""
+    items = await Database.fetch(
+        """
         SELECT id,
                name,
                description,
@@ -68,21 +100,71 @@ async def wishlist_handler(message: Message):
                ROW_NUMBER() OVER (ORDER BY is_taken, order_index, created_at) AS display_index
         FROM wishlist_items
         ORDER BY is_taken, order_index, created_at
-    """)
-    
-    if not items:
-        await message.answer(
-            get_wishlist_intro(),
-            reply_markup=get_main_menu_keyboard()
-        )
-        return
-    
-    items_list = [dict(item) for item in items]
-    await message.answer(
-        f"{get_wishlist_intro()}\n\n{get_wishlist_select_item_text()}",
-        reply_markup=get_wishlist_keyboard(items_list)
+        """
     )
 
+    if not items:
+        await callback.message.edit_text(
+            get_wishlist_empty_text(),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        await callback.answer()
+        return
+
+    items_list = [dict(item) for item in items]
+    await callback.message.edit_text(
+        get_wishlist_how_it_works_text(),
+        reply_markup=get_wishlist_keyboard(items_list),
+        disable_web_page_preview=True,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "wishlist_logistics")
+async def wishlist_logistics_handler(callback: CallbackQuery):
+    """Пояснение по логистике подарков"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="wishlist_back_to_intro",
+                )
+            ],
+        ]
+    )
+    await callback.message.edit_text(
+        get_wishlist_logistics_text(),
+        reply_markup=keyboard,
+        disable_web_page_preview=True,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "wishlist_back_to_intro")
+async def wishlist_back_to_intro_handler(callback: CallbackQuery):
+    """Возврат с логистики к первому экрану вишлиста"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📝 Открыть вишлист",
+                    callback_data="wishlist_open",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✈️ Информация по логистике",
+                    callback_data="wishlist_logistics",
+                )
+            ],
+        ]
+    )
+    await callback.message.edit_text(
+        get_wishlist_intro(),
+        reply_markup=keyboard,
+    )
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("wishlist_page_"))
 async def wishlist_page_handler(callback: CallbackQuery):
@@ -105,7 +187,7 @@ async def wishlist_page_handler(callback: CallbackQuery):
     
     items_list = [dict(item) for item in items]
     await callback.message.edit_text(
-        f"{get_wishlist_intro()}\n\n{get_wishlist_select_item_text()}",
+        get_wishlist_how_it_works_text(),
         reply_markup=get_wishlist_keyboard(items_list, page=page)
     )
     await callback.answer()
@@ -136,8 +218,13 @@ async def wishlist_item_handler(callback: CallbackQuery):
     if not item:
         await callback.answer("Товар не найден", show_alert=True)
         return
-    
-    status = "✅ Забрано" if item["is_taken"] else "🛒 Доступно"
+
+    user_id = callback.from_user.id
+    is_taken = item["is_taken"]
+    taken_by = item.get("taken_by_user_id")
+    can_untake = bool(is_taken and taken_by == user_id)
+
+    status = "✅ Этот подарок кто-то уже выбрал" if is_taken else "🛒 Доступно"
     index = item.get("display_index")
     title = f"{index}. {item['name']}" if index is not None else item["name"]
     text = f"<b>{title}</b>\n\n"
@@ -155,9 +242,9 @@ async def wishlist_item_handler(callback: CallbackQuery):
     
     await callback.message.edit_text(
         text,
-        reply_markup=get_wishlist_item_keyboard(item_id, item["is_taken"]),
+        reply_markup=get_wishlist_item_keyboard(item_id, is_taken, can_untake),
         disable_web_page_preview=True,
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -183,7 +270,8 @@ async def wishlist_take_handler(callback: CallbackQuery):
         WHERE id = $2
     """, user_id, item_id)
     
-    await callback.answer("Товар отмечен как забранный! ✅", show_alert=True)
+    # Краткое уведомление без модального окна
+    await callback.answer("✅ Вы выбрали этот подарок!")
     
     # Обновляем информацию о товаре
     updated_item = await Database.fetchrow("""
@@ -203,7 +291,7 @@ async def wishlist_take_handler(callback: CallbackQuery):
         WHERE wi.id = $1
     """, item_id)
     
-    status = "✅ Забрано"
+    status = "✅ Этот подарок кто-то уже выбрал"
     index = updated_item.get("display_index")
     title = f"{index}. {updated_item['name']}" if index is not None else updated_item["name"]
     text = f"<b>{title}</b>\n\n"
@@ -218,9 +306,10 @@ async def wishlist_take_handler(callback: CallbackQuery):
     
     await callback.message.edit_text(
         text,
-        reply_markup=get_wishlist_item_keyboard(item_id, True),
+        # Этот пользователь только что выбрал подарок — даём возможность отменить
+        reply_markup=get_wishlist_item_keyboard(item_id, True, can_untake=True),
         disable_web_page_preview=True,
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -245,7 +334,8 @@ async def wishlist_untake_handler(callback: CallbackQuery):
         WHERE id = $1
     """, item_id)
     
-    await callback.answer("Отметка отменена", show_alert=True)
+    # Краткое уведомление без модального окна
+    await callback.answer("Вы отменили выбор этого подарка")
     
     # Обновляем информацию о товаре
     updated_item = await Database.fetchrow("""
@@ -280,9 +370,10 @@ async def wishlist_untake_handler(callback: CallbackQuery):
     
     await callback.message.edit_text(
         text,
-        reply_markup=get_wishlist_item_keyboard(item_id, False),
+        # Подарок снова свободен — показываем кнопку выбора
+        reply_markup=get_wishlist_item_keyboard(item_id, False, can_untake=False),
         disable_web_page_preview=True,
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 
@@ -305,7 +396,7 @@ async def wishlist_list_handler(callback: CallbackQuery):
     
     items_list = [dict(item) for item in items]
     await callback.message.edit_text(
-        f"{get_wishlist_intro()}\n\n{get_wishlist_select_item_text()}",
+        get_wishlist_how_it_works_text(),
         reply_markup=get_wishlist_keyboard(items_list)
     )
     await callback.answer()

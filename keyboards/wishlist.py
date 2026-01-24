@@ -6,11 +6,8 @@ def get_wishlist_keyboard(items: list[dict], page: int = 0, items_per_page: int 
     """Клавиатура для списка товаров виш-листа"""
     keyboard_buttons = []
     
-    start_idx = page * items_per_page
-    end_idx = start_idx + items_per_page
-    page_items = items[start_idx:end_idx]
-    
-    for item in page_items:
+    # Показываем все товары сразу, без пагинации
+    for item in items:
         # Порядковый номер по всему списку
         index = item.get("display_index")
         if item.get("is_taken"):
@@ -26,48 +23,49 @@ def get_wishlist_keyboard(items: list[dict], page: int = 0, items_per_page: int 
             )
         ])
     
-    # Кнопки навигации
-    nav_buttons = []
-    if page > 0:
-        nav_buttons.append(
-            InlineKeyboardButton(text="◀️ Назад", callback_data=f"wishlist_page_{page - 1}")
-        )
-    if end_idx < len(items):
-        nav_buttons.append(
-            InlineKeyboardButton(text="Вперед ▶️", callback_data=f"wishlist_page_{page + 1}")
-        )
-    
-    if nav_buttons:
-        keyboard_buttons.append(nav_buttons)
-    
     keyboard_buttons.append([
-        InlineKeyboardButton(text="🔙 Главное меню", callback_data="main_menu")
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="wishlist_back_to_intro")
     ])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
 
 
-def get_wishlist_item_keyboard(item_id: int, is_taken: bool) -> InlineKeyboardMarkup:
-    """Клавиатура для конкретного товара виш-листа"""
+def get_wishlist_item_keyboard(
+    item_id: int,
+    is_taken: bool,
+    can_untake: bool = False,
+) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для конкретного товара виш-листа.
+    
+    - Если подарок свободен — показываем кнопку выбора.
+    - Если подарок уже выбран и это сделал текущий пользователь (can_untake=True),
+      показываем кнопку «Отменить выбор».
+    - Если подарок выбран кем-то другим — никаких кнопок выбора/отмены не показываем.
+    """
     keyboard_buttons = []
-    
+
     if not is_taken:
-        keyboard_buttons.append([
-            InlineKeyboardButton(
-                text="✅ Отметить как забранное",
-                callback_data=f"wishlist_take_{item_id}"
-            )
-        ])
-    else:
-        keyboard_buttons.append([
-            InlineKeyboardButton(
-                text="❌ Отменить отметку",
-                callback_data=f"wishlist_untake_{item_id}"
-            )
-        ])
-    
-    keyboard_buttons.append([
-        InlineKeyboardButton(text="🔙 К списку", callback_data="wishlist_list")
-    ])
-    
+        keyboard_buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="✅ Выбрать этот подарок",
+                    callback_data=f"wishlist_take_{item_id}",
+                )
+            ]
+        )
+    elif can_untake:
+        keyboard_buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="❌ Отменить выбор",
+                    callback_data=f"wishlist_untake_{item_id}",
+                )
+            ]
+        )
+
+    keyboard_buttons.append(
+        [InlineKeyboardButton(text="🔙 К списку", callback_data="wishlist_list")]
+    )
+
     return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)

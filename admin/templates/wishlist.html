@@ -94,7 +94,7 @@
                         <input type="text" name="link2" value="{{ item.link2 or '' }}" placeholder="Ссылка 2 (необязательно)">
                 </td>
                 <td>
-                    {% if item.is_taken %}✅ Забрано{% else %}🛒 Доступно{% endif %}
+                    {% if item.is_taken %}✅ Этот подарок кто-то уже выбрал{% else %}🛒 Доступно{% endif %}
                 </td>
                 <td>
                         <input type="number" name="order_index" value="{{ item.order_index or 0 }}" min="0" class="wishlist-order-input">

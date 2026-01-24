@@ -2,17 +2,51 @@
 
 {% block title %}Виш-лист{% endblock %}
 
+{% block extra_css %}
+<style>
+    .wishlist-form input[type="text"],
+    .wishlist-form input[type="number"],
+    .wishlist-form textarea {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .wishlist-table input[type="text"],
+    .wishlist-table input[type="number"],
+    .wishlist-table textarea {
+        width: 100%;
+        box-sizing: border-box;
+        font-size: 0.9rem;
+    }
+    .wishlist-table td {
+        vertical-align: top;
+    }
+    .wishlist-actions {
+        display: flex;
+        gap: 0.25rem;
+        flex-wrap: wrap;
+    }
+    .wishlist-actions .btn,
+    .wishlist-actions .btn-danger {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+    }
+    .wishlist-order-input {
+        max-width: 80px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="card">
     <h2>Добавить товар</h2>
-    <form method="POST" action="/wishlist/add">
+    <form method="POST" action="/wishlist/add" class="wishlist-form">
         <label for="name">Название:</label>
         <input type="text" id="name" name="name" required>
         
         <label for="description">Описание:</label>
         <textarea id="description" name="description"></textarea>
         
-        <label for="price_hint">Ориентировочная стоимость:</label>
+        <label for="price_hint">Стоимость:</label>
         <input type="text" id="price_hint" name="price_hint" placeholder="Например: 5 000 ₽">
         
         <label for="link">Ссылка:</label>
@@ -27,7 +61,7 @@
 
 <div class="card">
     <h2>Список товаров</h2>
-    <table>
+    <table class="wishlist-table">
         <thead>
             <tr>
                 <th>#</th>
@@ -61,14 +95,16 @@
                     {% if item.is_taken %}✅ Забрано{% else %}🛒 Доступно{% endif %}
                 </td>
                 <td>
-                        <input type="number" name="order_index" value="{{ item.order_index or 0 }}" min="0" style="width: 70px;">
+                        <input type="number" name="order_index" value="{{ item.order_index or 0 }}" min="0" class="wishlist-order-input">
                 </td>
                 <td>
-                        <button type="submit" class="btn">Сохранить</button>
+                    <div class="wishlist-actions">
+                        <button type="submit" class="btn" title="Сохранить">💾</button>
                     </form>
-                    <form method="POST" action="/wishlist/{{ item.id }}/delete" style="display: inline;">
-                        <button type="submit" class="btn btn-danger" onclick="return confirm('Удалить товар?')">Удалить</button>
+                    <form method="POST" action="/wishlist/{{ item.id }}/delete">
+                        <button type="submit" class="btn btn-danger" title="Удалить" onclick="return confirm('Удалить товар?')">🗑</button>
                     </form>
+                    </div>
                 </td>
             </tr>
             {% endfor %}

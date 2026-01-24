@@ -1,5 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from typing import Optional
+from html import escape
 from keyboards.main_menu import get_main_menu_keyboard
 from keyboards.wishlist import get_wishlist_keyboard, get_wishlist_item_keyboard
 from database.connection import Database
@@ -7,6 +9,30 @@ from messages import get_wishlist_intro, get_wishlist_select_item_text
 
 router = Router()
 
+
+def _format_price_hint(raw: Optional[str]) -> str:
+    """
+    Возвращает стоимость как текст (без автоматического добавления ₽),
+    но слегка модифицирует её, чтобы Telegram не подсвечивал как номер/телефон.
+    """
+    if not raw:
+        return ""
+    value = str(raw).strip()
+    # Заменяем обычный дефис на похожий символ, чтобы Telegram не воспринимал как номер телефона
+    value = value.replace("-", "−")
+    return value
+
+
+def _format_link(link: Optional[str]) -> str:
+    """Форматирование ссылки: обрезаем длинные и делаем кликабельными."""
+    if not link:
+        return ""
+    link = link.strip()
+    display = link
+    if len(display) > 50:
+        display = display[:47] + "..."
+    # Экранируем текст и ссылку для HTML
+    return f'<a href="{escape(link)}">{escape(display)}</a>'
 
 @router.message(F.text == "🎁 Вишлист")
 async def wishlist_handler(message: Message):
@@ -98,10 +124,10 @@ async def wishlist_item_handler(callback: CallbackQuery):
         text += f"<b>Комментарий:</b> {item['description']}\n\n"
     
     if item.get("price_hint"):
-        text += f"<b>Ориентировочная стоимость:</b> {item['price_hint']}\n\n"
+        text += f"<b>Стоимость:</b> {_format_price_hint(item['price_hint'])}\n\n"
     
     if item["link"]:
-        text += f"<b>Ссылка:</b> {item['link']}\n\n"
+        text += f"<b>Ссылка:</b> {_format_link(item['link'])}\n\n"
     
     text += f"<b>Статус:</b> {status}"
     
@@ -161,9 +187,9 @@ async def wishlist_take_handler(callback: CallbackQuery):
     if updated_item["description"]:
         text += f"<b>Комментарий:</b> {updated_item['description']}\n\n"
     if updated_item.get("price_hint"):
-        text += f"<b>Ориентировочная стоимость:</b> {updated_item['price_hint']}\n\n"
+        text += f"<b>Стоимость:</b> {_format_price_hint(updated_item['price_hint'])}\n\n"
     if updated_item["link"]:
-        text += f"<b>Ссылка:</b> {updated_item['link']}\n\n"
+        text += f"<b>Ссылка:</b> {_format_link(updated_item['link'])}\n\n"
     text += f"<b>Статус:</b> {status}"
     
     await callback.message.edit_text(
@@ -221,9 +247,9 @@ async def wishlist_untake_handler(callback: CallbackQuery):
     if updated_item["description"]:
         text += f"<b>Комментарий:</b> {updated_item['description']}\n\n"
     if updated_item.get("price_hint"):
-        text += f"<b>Ориентировочная стоимость:</b> {updated_item['price_hint']}\n\n"
+        text += f"<b>Стоимость:</b> {_format_price_hint(updated_item['price_hint'])}\n\n"
     if updated_item["link"]:
-        text += f"<b>Ссылка:</b> {updated_item['link']}\n\n"
+        text += f"<b>Ссылка:</b> {_format_link(updated_item['link'])}\n\n"
     text += f"<b>Статус:</b> {status}"
     
     await callback.message.edit_text(

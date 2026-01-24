@@ -167,7 +167,6 @@ async def dashboard(request: Request):
     # Статистика
     users_count = await AdminDatabase.fetchval("SELECT COUNT(*) FROM users")
     wishlist_count = await AdminDatabase.fetchval("SELECT COUNT(*) FROM wishlist_items")
-    info_count = await AdminDatabase.fetchval("SELECT COUNT(*) FROM wedding_info")
     pending_pushes = await AdminDatabase.fetchval(
         "SELECT COUNT(*) FROM scheduled_pushes WHERE is_sent = FALSE"
     )
@@ -179,7 +178,6 @@ async def dashboard(request: Request):
             "username": username,
             "users_count": users_count,
             "wishlist_count": wishlist_count,
-            "info_count": info_count,
             "pending_pushes": pending_pushes
         }
     )
@@ -279,72 +277,6 @@ async def wishlist_edit(
         name, description, link, link2, price_hint, order_index, item_id
     )
     return RedirectResponse(url="/wishlist", status_code=303)
-
-
-# ========== ПОЛЕЗНАЯ ИНФОРМАЦИЯ ==========
-
-@app.get("/info", response_class=HTMLResponse)
-async def info_page(request: Request):
-    token = request.cookies.get("access_token")
-    if not token:
-        return RedirectResponse(url="/", status_code=303)
-    
-    sections = await AdminDatabase.fetch(
-        "SELECT * FROM wedding_info ORDER BY order_index ASC, created_at ASC"
-    )
-    return templates.TemplateResponse(
-        "info.html",
-        {"request": request, "sections": [dict(s) for s in sections]}
-    )
-
-
-@app.post("/info/add")
-async def info_add(
-    request: Request,
-    section: str = Form(...),
-    title: str = Form(...),
-    content: str = Form(...),
-    order_index: int = Form(0)
-):
-    token = request.cookies.get("access_token")
-    if not token:
-        return RedirectResponse(url="/", status_code=303)
-    
-    await AdminDatabase.execute(
-        "INSERT INTO wedding_info (section, title, content, order_index) VALUES ($1, $2, $3, $4)",
-        section, title, content, order_index
-    )
-    return RedirectResponse(url="/info", status_code=303)
-
-
-@app.post("/info/{section_id}/delete")
-async def info_delete(request: Request, section_id: int):
-    token = request.cookies.get("access_token")
-    if not token:
-        return RedirectResponse(url="/", status_code=303)
-    
-    await AdminDatabase.execute("DELETE FROM wedding_info WHERE id = $1", section_id)
-    return RedirectResponse(url="/info", status_code=303)
-
-
-@app.post("/info/{section_id}/edit")
-async def info_edit(
-    request: Request,
-    section_id: int,
-    section: str = Form(...),
-    title: str = Form(...),
-    content: str = Form(...),
-    order_index: int = Form(0)
-):
-    token = request.cookies.get("access_token")
-    if not token:
-        return RedirectResponse(url="/", status_code=303)
-    
-    await AdminDatabase.execute(
-        "UPDATE wedding_info SET section = $1, title = $2, content = $3, order_index = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5",
-        section, title, content, order_index, section_id
-    )
-    return RedirectResponse(url="/info", status_code=303)
 
 
 # ========== ПУШИ ==========

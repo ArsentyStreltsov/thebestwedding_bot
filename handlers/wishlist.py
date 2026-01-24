@@ -34,6 +34,25 @@ def _format_link(link: Optional[str]) -> str:
     # Экранируем текст и ссылку для HTML
     return f'<a href="{escape(link)}">{escape(display)}</a>'
 
+
+def _format_links_block(link: Optional[str], link2: Optional[str]) -> str:
+    """
+    Формирует HTML-блок со ссылками для карточки товара.
+    Поддерживает одну или две ссылки.
+    """
+    links: list[str] = []
+    if link:
+        links.append(_format_link(link))
+    if link2:
+        links.append(_format_link(link2))
+    if not links:
+        return ""
+    if len(links) == 1:
+        return f"<b>Ссылка:</b> {links[0]}\n\n"
+    # две ссылки
+    numbered = [f"{idx + 1}) {l}" for idx, l in enumerate(links)]
+    return "<b>Ссылки:</b>\n" + "\n".join(numbered) + "\n\n"
+
 @router.message(F.text == "🎁 Вишлист")
 async def wishlist_handler(message: Message):
     """Обработчик раздела виш-листа"""
@@ -42,6 +61,7 @@ async def wishlist_handler(message: Message):
                name,
                description,
                link,
+               link2,
                price_hint,
                is_taken,
                taken_by_user_id,
@@ -74,6 +94,7 @@ async def wishlist_page_handler(callback: CallbackQuery):
                name,
                description,
                link,
+               link2,
                price_hint,
                is_taken,
                taken_by_user_id,
@@ -102,6 +123,7 @@ async def wishlist_item_handler(callback: CallbackQuery):
                    name,
                    description,
                    link,
+                   link2,
                    price_hint,
                    is_taken,
                    taken_by_user_id,
@@ -125,9 +147,9 @@ async def wishlist_item_handler(callback: CallbackQuery):
     
     if item.get("price_hint"):
         text += f"<b>Стоимость:</b> {_format_price_hint(item['price_hint'])}\n\n"
-    
-    if item["link"]:
-        text += f"<b>Ссылка:</b> {_format_link(item['link'])}\n\n"
+    links_block = _format_links_block(item.get("link"), item.get("link2"))
+    if links_block:
+        text += links_block
     
     text += f"<b>Статус:</b> {status}"
     
@@ -171,6 +193,7 @@ async def wishlist_take_handler(callback: CallbackQuery):
                    name,
                    description,
                    link,
+                   link2,
                    price_hint,
                    is_taken,
                    taken_by_user_id,
@@ -188,8 +211,9 @@ async def wishlist_take_handler(callback: CallbackQuery):
         text += f"<b>Комментарий:</b> {updated_item['description']}\n\n"
     if updated_item.get("price_hint"):
         text += f"<b>Стоимость:</b> {_format_price_hint(updated_item['price_hint'])}\n\n"
-    if updated_item["link"]:
-        text += f"<b>Ссылка:</b> {_format_link(updated_item['link'])}\n\n"
+    links_block = _format_links_block(updated_item.get("link"), updated_item.get("link2"))
+    if links_block:
+        text += links_block
     text += f"<b>Статус:</b> {status}"
     
     await callback.message.edit_text(
@@ -231,6 +255,7 @@ async def wishlist_untake_handler(callback: CallbackQuery):
                    name,
                    description,
                    link,
+                   link2,
                    price_hint,
                    is_taken,
                    taken_by_user_id,
@@ -248,8 +273,9 @@ async def wishlist_untake_handler(callback: CallbackQuery):
         text += f"<b>Комментарий:</b> {updated_item['description']}\n\n"
     if updated_item.get("price_hint"):
         text += f"<b>Стоимость:</b> {_format_price_hint(updated_item['price_hint'])}\n\n"
-    if updated_item["link"]:
-        text += f"<b>Ссылка:</b> {_format_link(updated_item['link'])}\n\n"
+    links_block = _format_links_block(updated_item.get("link"), updated_item.get("link2"))
+    if links_block:
+        text += links_block
     text += f"<b>Статус:</b> {status}"
     
     await callback.message.edit_text(
@@ -268,6 +294,7 @@ async def wishlist_list_handler(callback: CallbackQuery):
                name,
                description,
                link,
+               link2,
                price_hint,
                is_taken,
                taken_by_user_id,

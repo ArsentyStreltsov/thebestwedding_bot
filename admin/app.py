@@ -70,6 +70,7 @@ async def init_admin_db():
             name VARCHAR(500) NOT NULL,
             description TEXT,
             link VARCHAR(1000),
+            link2 VARCHAR(1000),
             price_hint VARCHAR(255),
             order_index INTEGER DEFAULT 0,
             is_taken BOOLEAN DEFAULT FALSE,
@@ -85,6 +86,9 @@ async def init_admin_db():
     )
     await AdminDatabase.execute(
         "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS link2 VARCHAR(1000)"
     )
     
     await AdminDatabase.execute("""
@@ -212,6 +216,7 @@ async def wishlist_add(
     name: str = Form(...),
     description: str = Form(""),
     link: str = Form(""),
+    link2: str = Form(""),
     price_hint: str = Form(""),
     order_index: int = Form(0)
 ):
@@ -227,9 +232,9 @@ async def wishlist_add(
         order_index = max_order + 1
     
     await AdminDatabase.execute(
-        "INSERT INTO wishlist_items (name, description, link, price_hint, order_index) "
-        "VALUES ($1, $2, $3, $4, $5)",
-        name, description, link, price_hint, order_index
+        "INSERT INTO wishlist_items (name, description, link, link2, price_hint, order_index) "
+        "VALUES ($1, $2, $3, $4, $5, $6)",
+        name, description, link, link2, price_hint, order_index
     )
     return RedirectResponse(url="/wishlist", status_code=303)
 
@@ -251,6 +256,7 @@ async def wishlist_edit(
     name: str = Form(...),
     description: str = Form(""),
     link: str = Form(""),
+    link2: str = Form(""),
     price_hint: str = Form(""),
     order_index: int = Form(0)
 ):
@@ -264,12 +270,13 @@ async def wishlist_edit(
         SET name = $1,
             description = $2,
             link = $3,
-            price_hint = $4,
-            order_index = $5,
+            link2 = $4,
+            price_hint = $5,
+            order_index = $6,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $6
+        WHERE id = $7
         """,
-        name, description, link, price_hint, order_index, item_id
+        name, description, link, link2, price_hint, order_index, item_id
     )
     return RedirectResponse(url="/wishlist", status_code=303)
 

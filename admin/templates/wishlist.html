@@ -49,8 +49,9 @@
         <label for="price_hint">Стоимость:</label>
         <input type="text" id="price_hint" name="price_hint" placeholder="Например: 5 000 ₽">
         
-        <label for="link">Ссылка:</label>
-        <input type="text" id="link" name="link" placeholder="https://...">
+        <label for="link">Ссылки:</label>
+        <input type="text" id="link" name="link" placeholder="Ссылка 1 (https://...)">
+        <input type="text" id="link2" name="link2" placeholder="Ссылка 2 (необязательно)">
         
         <label for="order_index">Порядок в списке:</label>
         <input type="number" id="order_index" name="order_index" min="0" placeholder="Оставьте пустым для автоматического">
@@ -89,7 +90,8 @@
                         <input type="text" name="price_hint" value="{{ item.price_hint or '' }}" placeholder="Например: 5 000 ₽">
                 </td>
                 <td>
-                        <input type="text" name="link" value="{{ item.link or '' }}" placeholder="https://...">
+                        <input type="text" name="link" value="{{ item.link or '' }}" placeholder="Ссылка 1 (https://...)">
+                        <input type="text" name="link2" value="{{ item.link2 or '' }}" placeholder="Ссылка 2 (необязательно)">
                 </td>
                 <td>
                     {% if item.is_taken %}✅ Забрано{% else %}🛒 Доступно{% endif %}

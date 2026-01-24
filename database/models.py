@@ -23,6 +23,7 @@ async def init_db() -> None:
             name VARCHAR(500) NOT NULL,
             description TEXT,
             link VARCHAR(1000),
+            link2 VARCHAR(1000),
             price_hint VARCHAR(255),
             order_index INTEGER DEFAULT 0,
             is_taken BOOLEAN DEFAULT FALSE,
@@ -38,6 +39,9 @@ async def init_db() -> None:
     )
     await Database.execute(
         "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0"
+    )
+    await Database.execute(
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS link2 VARCHAR(1000)"
     )
     
     # Таблица полезной информации

@@ -1,7 +1,7 @@
 from aiogram import Router, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from keyboards.main_menu import get_main_menu_keyboard
-from messages import get_info_text, get_google_calendar_url, get_apple_calendar_url, generate_ics_content
+from messages import get_info_text, get_google_calendar_url, get_apple_calendar_url
 
 router = Router()
 
@@ -33,26 +33,14 @@ async def info_handler(message: Message):
         )
     )
     
-    # Создаём клавиатуру только если есть кнопки
+    # Создаём клавиатуру
     calendar_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[buttons] if buttons else []
     )
     
-    # Отправляем текст с кнопками
     await message.answer(
         get_info_text(),
         reply_markup=calendar_keyboard,
         parse_mode="HTML",
         disable_web_page_preview=True
-    )
-    
-    # Отправляем .ics файл для Apple Calendar
-    ics_content = generate_ics_content()
-    ics_file = BufferedInputFile(
-        ics_content.encode('utf-8'),
-        filename="wedding.ics"
-    )
-    await message.answer_document(
-        ics_file,
-        caption="📅 Добавьте событие в календарь"
     )

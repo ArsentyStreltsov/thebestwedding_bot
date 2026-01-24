@@ -52,6 +52,62 @@ async def init_admin_db():
         )
     """)
     
+    # Миграции для улучшенной логики пушей
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS last_error TEXT"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS total_targets INT DEFAULT 0"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS success_count INT DEFAULT 0"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS fail_count INT DEFAULT 0"
+    )
+    
+    # Обновляем существующие записи
+    await AdminDatabase.execute("""
+        UPDATE scheduled_pushes 
+        SET status = CASE 
+            WHEN is_sent = TRUE THEN 'sent'
+            ELSE 'pending'
+        END
+        WHERE status IS NULL OR status = ''
+    """)
+    
+    # Таблица логов доставки пушей
+    await AdminDatabase.execute("""
+        CREATE TABLE IF NOT EXISTS push_delivery_logs (
+            id SERIAL PRIMARY KEY,
+            push_id INT NOT NULL REFERENCES scheduled_pushes(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            duration_ms INT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Индексы для производительности
+    await AdminDatabase.execute("""
+        CREATE INDEX IF NOT EXISTS idx_push_pending
+        ON scheduled_pushes(status, scheduled_at)
+    """)
+    await AdminDatabase.execute("""
+        CREATE INDEX IF NOT EXISTS idx_push_logs_push
+        ON push_delivery_logs(push_id)
+    """)
+    
     # Также создаем остальные таблицы, если их нет (для совместимости)
     await AdminDatabase.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -362,51 +418,23 @@ async def push_send(
             print(f"Ошибка парсинга времени: {e}")
             scheduled_time = None
     
-    # Если время не указано или в прошлом, отправляем сразу
+    # Преобразуем список в массив PostgreSQL
+    user_ids_array = user_ids if user_ids else []
+    
+    # Если время не указано или в прошлом, ставим scheduled_at = CURRENT_TIMESTAMP
+    # Scheduler заберёт и отправит немедленно
     if not scheduled_time:
-        await send_push_immediately(message, send_to_all, user_ids)
-    else:
-        # Сохраняем в БД для отправки позже
-        # Преобразуем список в массив PostgreSQL
-        user_ids_array = user_ids if user_ids else []
-        await AdminDatabase.execute(
-            """INSERT INTO scheduled_pushes (message, send_to_all, target_user_ids, scheduled_at)
-               VALUES ($1, $2, $3, $4)""",
-            message, send_to_all, user_ids_array, scheduled_time
-        )
+        scheduled_time = None  # Будет установлено в CURRENT_TIMESTAMP на стороне БД
+    
+    # Всегда создаём запись в БД со статусом 'pending'
+    # Scheduler заберёт и отправит (единый путь для всех пушей)
+    await AdminDatabase.execute(
+        """INSERT INTO scheduled_pushes (message, send_to_all, target_user_ids, scheduled_at, status)
+           VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), 'pending')""",
+        message, send_to_all, user_ids_array, scheduled_time
+    )
     
     return RedirectResponse(url="/pushes", status_code=303)
-
-
-async def send_push_immediately(message: str, send_to_all: bool, user_ids: List[int]):
-    """Отправка пуша немедленно"""
-    if send_to_all:
-        users = await AdminDatabase.fetch("SELECT user_id FROM users")
-        user_ids = [u["user_id"] for u in users]
-    
-    # Отправляем через Telegram Bot API
-    async with httpx.AsyncClient() as client:
-        for user_id in user_ids:
-            try:
-                await client.post(
-                    f"https://api.telegram.org/bot{AdminConfig.BOT_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": user_id,
-                        "text": message,
-                        "parse_mode": "HTML"
-                    },
-                    timeout=10.0
-                )
-            except Exception as e:
-                print(f"Ошибка отправки пуша пользователю {user_id}: {e}")
-    
-    # Отмечаем как отправленное
-    user_ids_array = user_ids if user_ids else []
-    await AdminDatabase.execute(
-        """INSERT INTO scheduled_pushes (message, send_to_all, target_user_ids, is_sent, sent_at)
-           VALUES ($1, $2, $3, TRUE, CURRENT_TIMESTAMP)""",
-        message, send_to_all, user_ids_array
-    )
 
 
 if __name__ == "__main__":

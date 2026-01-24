@@ -111,6 +111,108 @@ async def init_db() -> None:
         )
     """)
     
+    # Миграции для улучшенной логики пушей
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS last_error TEXT"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS total_targets INT DEFAULT 0"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS success_count INT DEFAULT 0"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS fail_count INT DEFAULT 0"
+    )
+    
+    # Обновляем существующие записи: если is_sent=TRUE, ставим status='sent'
+    await Database.execute("""
+        UPDATE scheduled_pushes 
+        SET status = CASE 
+            WHEN is_sent = TRUE THEN 'sent'
+            ELSE 'pending'
+        END
+        WHERE status IS NULL OR status = ''
+    """)
+    
+    # Таблица логов доставки пушей
+    await Database.execute("""
+        CREATE TABLE IF NOT EXISTS push_delivery_logs (
+            id SERIAL PRIMARY KEY,
+            push_id INT NOT NULL REFERENCES scheduled_pushes(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            duration_ms INT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Индексы для производительности
+    await Database.execute("""
+        CREATE INDEX IF NOT EXISTS idx_push_pending
+        ON scheduled_pushes(status, scheduled_at)
+    """)
+    await Database.execute("""
+        CREATE INDEX IF NOT EXISTS idx_push_logs_push
+        ON push_delivery_logs(push_id)
+    """)
+    
+    # Миграции для улучшенной логики пушей
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS last_error TEXT"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS total_targets INT DEFAULT 0"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS success_count INT DEFAULT 0"
+    )
+    await Database.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS fail_count INT DEFAULT 0"
+    )
+    
+    # Таблица логов доставки пушей
+    await Database.execute("""
+        CREATE TABLE IF NOT EXISTS push_delivery_logs (
+            id SERIAL PRIMARY KEY,
+            push_id INT NOT NULL REFERENCES scheduled_pushes(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            duration_ms INT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Индексы для производительности
+    await Database.execute("""
+        CREATE INDEX IF NOT EXISTS idx_push_pending
+        ON scheduled_pushes(status, scheduled_at)
+    """)
+    await Database.execute("""
+        CREATE INDEX IF NOT EXISTS idx_push_logs_push
+        ON push_delivery_logs(push_id)
+    """)
+    
     # Таблица админов для веб-админки
     await Database.execute("""
         CREATE TABLE IF NOT EXISTS admin_users (

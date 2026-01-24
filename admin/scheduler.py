@@ -1,85 +1,201 @@
 """
 Фоновый процесс для отправки запланированных пушей
-Запускается отдельно или интегрируется в основной бот
+Улучшенная версия с атомарным захватом задач, параллельной отправкой и логированием
 """
 import asyncio
-from datetime import datetime, timezone
-from admin.database import AdminDatabase
-from admin.config import AdminConfig
+import logging
+import time
+from datetime import datetime
+from typing import List, Tuple, Optional
+
 import httpx
 
+from admin.database import AdminDatabase
+from admin.config import AdminConfig
 
-async def send_scheduled_pushes():
-    """Проверка и отправка запланированных пушей"""
-    # Проверяем, что pool инициализирован
-    if AdminDatabase._pool is None:
-        print("⚠️  AdminDatabase не инициализирован, scheduler не будет работать")
+
+logger = logging.getLogger("push_scheduler")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+)
+
+
+POLL_INTERVAL_SEC = 5
+CONCURRENCY = 15
+HTTP_TIMEOUT = 10.0
+
+
+async def claim_next_push() -> Optional[dict]:
+    """
+    Атомарно забираем 1 задачу в processing.
+    Важно: работает корректно только если scheduler один (или много, но с SKIP LOCKED).
+    """
+    row = await AdminDatabase.fetchrow(
+        """
+        WITH next AS (
+            SELECT id
+            FROM scheduled_pushes
+            WHERE status = 'pending'
+              AND (scheduled_at IS NULL OR scheduled_at <= CURRENT_TIMESTAMP)
+            ORDER BY scheduled_at NULLS FIRST, created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        )
+        UPDATE scheduled_pushes sp
+        SET status = 'processing',
+            locked_at = CURRENT_TIMESTAMP,
+            attempts = attempts + 1
+        FROM next
+        WHERE sp.id = next.id
+        RETURNING sp.*;
+        """
+    )
+    return dict(row) if row else None
+
+
+async def get_recipients(send_to_all: bool, target_user_ids) -> List[int]:
+    """Получает список получателей для пуша"""
+    if send_to_all:
+        users = await AdminDatabase.fetch("SELECT user_id FROM users")
+        return [int(u["user_id"]) for u in users]
+
+    if not target_user_ids:
+        return []
+    # asyncpg обычно вернёт list/tuple
+    if isinstance(target_user_ids, (list, tuple)):
+        return [int(x) for x in target_user_ids]
+    return [int(target_user_ids)]
+
+
+async def send_one(client: httpx.AsyncClient, user_id: int, message: str) -> Tuple[bool, Optional[str], int]:
+    """
+    Отправляет 1 сообщение. Возвращает: ok, error_text, duration_ms
+    """
+    start = time.perf_counter()
+    try:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{AdminConfig.BOT_TOKEN}/sendMessage",
+            json={"chat_id": user_id, "text": message, "parse_mode": "HTML"},
+            timeout=HTTP_TIMEOUT
+        )
+        duration_ms = int((time.perf_counter() - start) * 1000)
+
+        if resp.status_code != 200:
+            return False, f"HTTP {resp.status_code}: {resp.text[:500]}", duration_ms
+
+        data = resp.json()
+        if not data.get("ok"):
+            return False, f"TG not ok: {str(data)[:500]}", duration_ms
+
+        return True, None, duration_ms
+    except Exception as e:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return False, str(e)[:500], duration_ms
+
+
+async def process_push(push: dict) -> None:
+    """Обрабатывает один пуш: получает получателей, отправляет параллельно, логирует результаты"""
+    push_id = push["id"]
+    message = push["message"]
+    send_to_all = push["send_to_all"]
+    target_user_ids = push.get("target_user_ids")
+
+    recipients = await get_recipients(send_to_all, target_user_ids)
+    total = len(recipients)
+
+    await AdminDatabase.execute(
+        "UPDATE scheduled_pushes SET total_targets = $1 WHERE id = $2",
+        total, push_id
+    )
+
+    if total == 0:
+        await AdminDatabase.execute(
+            """
+            UPDATE scheduled_pushes
+            SET status = 'failed',
+                last_error = 'No recipients',
+                sent_at = CURRENT_TIMESTAMP,
+                success_count = 0,
+                fail_count = 0
+            WHERE id = $1
+            """,
+            push_id
+        )
+        logger.warning(f"Push {push_id}: no recipients")
         return
-    
+
+    sem = asyncio.Semaphore(CONCURRENCY)
+
+    async def guarded_send(uid: int):
+        async with sem:
+            return uid, await send_one(client, uid, message)
+
+    success = 0
+    fail = 0
+
+    async with httpx.AsyncClient() as client:
+        tasks = [asyncio.create_task(guarded_send(uid)) for uid in recipients]
+        for task in asyncio.as_completed(tasks):
+            uid, (ok, err, duration_ms) = await task
+            if ok:
+                success += 1
+                await AdminDatabase.execute(
+                    """
+                    INSERT INTO push_delivery_logs (push_id, user_id, status, duration_ms)
+                    VALUES ($1, $2, 'sent', $3)
+                    """,
+                    push_id, uid, duration_ms
+                )
+            else:
+                fail += 1
+                await AdminDatabase.execute(
+                    """
+                    INSERT INTO push_delivery_logs (push_id, user_id, status, error, duration_ms)
+                    VALUES ($1, $2, 'failed', $3, $4)
+                    """,
+                    push_id, uid, err, duration_ms
+                )
+
+    status = "sent" if fail == 0 else ("sent_with_errors" if success > 0 else "failed")
+    last_error = None if fail == 0 else f"{fail} deliveries failed (see push_delivery_logs)"
+
+    await AdminDatabase.execute(
+        """
+        UPDATE scheduled_pushes
+        SET status = $2,
+            is_sent = TRUE,
+            sent_at = CURRENT_TIMESTAMP,
+            success_count = $3,
+            fail_count = $4,
+            last_error = $5
+        WHERE id = $1
+        """,
+        push_id, status, success, fail, last_error
+    )
+
+    logger.info(f"Push {push_id}: total={total}, success={success}, fail={fail}, status={status}")
+
+
+async def run_scheduler_forever():
+    """Основной цикл scheduler"""
+    AdminConfig.validate()
+    await AdminDatabase.create_pool()
+
+    logger.info("🚀 Scheduler started")
     while True:
         try:
-            # Получаем пушы, которые нужно отправить
-            pushes = await AdminDatabase.fetch(
-                """SELECT * FROM scheduled_pushes 
-                   WHERE is_sent = FALSE 
-                   AND (scheduled_at IS NULL OR scheduled_at <= CURRENT_TIMESTAMP)"""
-            )
-            
-            for push in pushes:
-                push_dict = dict(push)
-                message = push_dict["message"]
-                send_to_all = push_dict["send_to_all"]
-                target_user_ids = push_dict.get("target_user_ids") or []
-                
-                # Получаем список пользователей
-                if send_to_all:
-                    users = await AdminDatabase.fetch("SELECT user_id FROM users")
-                    user_ids = [u["user_id"] for u in users]
-                else:
-                    # Преобразуем массив PostgreSQL в список Python
-                    if target_user_ids:
-                        user_ids = list(target_user_ids) if isinstance(target_user_ids, (list, tuple)) else [target_user_ids]
-                    else:
-                        user_ids = []
-                
-                # Отправляем пуш
-                success_count = 0
-                async with httpx.AsyncClient() as client:
-                    for user_id in user_ids:
-                        try:
-                            await client.post(
-                                f"https://api.telegram.org/bot{AdminConfig.BOT_TOKEN}/sendMessage",
-                                json={
-                                    "chat_id": user_id,
-                                    "text": message,
-                                    "parse_mode": "HTML"
-                                },
-                                timeout=10.0
-                            )
-                            success_count += 1
-                        except Exception as e:
-                            print(f"Ошибка отправки пуша пользователю {user_id}: {e}")
-                
-                # Отмечаем как отправленное
-                await AdminDatabase.execute(
-                    "UPDATE scheduled_pushes SET is_sent = TRUE, sent_at = CURRENT_TIMESTAMP WHERE id = $1",
-                    push_dict["id"]
-                )
-                
-                print(f"Пуш {push_dict['id']} отправлен {success_count} пользователям")
-            
-            # Ждем 60 секунд перед следующей проверкой
-            await asyncio.sleep(60)
-            
+            push = await claim_next_push()
+            if not push:
+                await asyncio.sleep(POLL_INTERVAL_SEC)
+                continue
+
+            await process_push(push)
+
         except Exception as e:
-            print(f"Ошибка в scheduler: {e}")
-            await asyncio.sleep(60)
+            logger.exception(f"Scheduler loop error: {e}")
+            await asyncio.sleep(POLL_INTERVAL_SEC)
 
 
 if __name__ == "__main__":
-    async def main():
-        AdminConfig.validate()
-        await AdminDatabase.create_pool()
-        await send_scheduled_pushes()
-    
-    asyncio.run(main())
+    asyncio.run(run_scheduler_forever())

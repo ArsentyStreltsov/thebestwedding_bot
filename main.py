@@ -9,12 +9,8 @@ from config import Config
 from database import Database, init_db
 from handlers import start_router, wishlist_router, info_router, dresscode_router, disclaimer_router, video_router
 
-# Импорт scheduler для запланированных пушей
-try:
-    from admin.scheduler import send_scheduled_pushes
-    SCHEDULER_AVAILABLE = True
-except ImportError:
-    SCHEDULER_AVAILABLE = False
+# Scheduler теперь запускается отдельным процессом/воркером
+# Не импортируем его здесь, чтобы избежать дублирования
 
 # Настройка логирования
 logging.basicConfig(
@@ -75,17 +71,9 @@ async def init_bot():
     dp.include_router(disclaimer_router)
     dp.include_router(video_router)
     
-    # Запуск фоновой задачи для отправки запланированных пушей
-    if SCHEDULER_AVAILABLE:
-        try:
-            from admin.database import AdminDatabase
-            from admin.config import AdminConfig
-            # Инициализируем AdminDatabase для scheduler
-            AdminConfig.validate()
-            await AdminDatabase.create_pool()
-            asyncio.create_task(send_scheduled_pushes())
-        except Exception as e:
-            logger.warning(f"Scheduler не запущен: {e}")
+    # Scheduler теперь запускается отдельным процессом/воркером
+    # Не запускаем его здесь, чтобы избежать дублирования
+    # На Railway создайте отдельный worker service: python -m admin.scheduler
     
     return bot, dp
 
@@ -159,14 +147,6 @@ async def main():
         # Закрытие подключений
         try:
             await Database.close_pool()
-            # Закрываем также AdminDatabase если был инициализирован
-            if SCHEDULER_AVAILABLE:
-                try:
-                    from admin.database import AdminDatabase
-                    await AdminDatabase.close_pool()
-                except:
-                    pass
-            pass
         except:
             pass
 

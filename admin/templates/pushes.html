@@ -47,6 +47,7 @@
                 <th>Запланировано</th>
                 <th>Отправлено</th>
                 <th>Статус</th>
+                <th>Статистика</th>
             </tr>
         </thead>
         <tbody>
@@ -57,7 +58,20 @@
                 <td>{% if push.send_to_all %}Всем{% else %}Выборочно{% endif %}</td>
                 <td>{% if push.scheduled_at %}{{ push.scheduled_at }}{% else %}-{% endif %}</td>
                 <td>{% if push.sent_at %}{{ push.sent_at }}{% else %}-{% endif %}</td>
-                <td>{% if push.is_sent %}✅ Отправлено{% else %}⏳ Ожидает{% endif %}</td>
+                <td>
+                    {% if push.status == 'sent' %}✅ Отправлено
+                    {% elif push.status == 'sent_with_errors' %}⚠️ Отправлено с ошибками
+                    {% elif push.status == 'failed' %}❌ Ошибка
+                    {% elif push.status == 'processing' %}🔄 Обрабатывается
+                    {% else %}⏳ Ожидает{% endif %}
+                </td>
+                <td>
+                    {% if push.total_targets %}
+                        Всего: {{ push.total_targets }}
+                        {% if push.success_count is not none %} | ✅ {{ push.success_count }}{% endif %}
+                        {% if push.fail_count is not none and push.fail_count > 0 %} | ❌ {{ push.fail_count }}{% endif %}
+                    {% else %}-{% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

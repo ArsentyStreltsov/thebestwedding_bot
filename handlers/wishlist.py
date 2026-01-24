@@ -12,9 +12,16 @@ router = Router()
 async def wishlist_handler(message: Message):
     """Обработчик раздела виш-листа"""
     items = await Database.fetch("""
-        SELECT id, name, description, link, is_taken, taken_by_user_id
+        SELECT id,
+               name,
+               description,
+               link,
+               price_hint,
+               is_taken,
+               taken_by_user_id,
+               ROW_NUMBER() OVER (ORDER BY is_taken, order_index, created_at) AS display_index
         FROM wishlist_items
-        ORDER BY created_at DESC
+        ORDER BY is_taken, order_index, created_at
     """)
     
     if not items:
@@ -37,9 +44,16 @@ async def wishlist_page_handler(callback: CallbackQuery):
     page = int(callback.data.split("_")[-1])
     
     items = await Database.fetch("""
-        SELECT id, name, description, link, is_taken, taken_by_user_id
+        SELECT id,
+               name,
+               description,
+               link,
+               price_hint,
+               is_taken,
+               taken_by_user_id,
+               ROW_NUMBER() OVER (ORDER BY is_taken, order_index, created_at) AS display_index
         FROM wishlist_items
-        ORDER BY created_at DESC
+        ORDER BY is_taken, order_index, created_at
     """)
     
     items_list = [dict(item) for item in items]
@@ -56,9 +70,19 @@ async def wishlist_item_handler(callback: CallbackQuery):
     item_id = int(callback.data.split("_")[-1])
     
     item = await Database.fetchrow("""
-        SELECT id, name, description, link, is_taken, taken_by_user_id
-        FROM wishlist_items
-        WHERE id = $1
+        SELECT *
+        FROM (
+            SELECT id,
+                   name,
+                   description,
+                   link,
+                   price_hint,
+                   is_taken,
+                   taken_by_user_id,
+                   ROW_NUMBER() OVER (ORDER BY is_taken, order_index, created_at) AS display_index
+            FROM wishlist_items
+        ) wi
+        WHERE wi.id = $1
     """, item_id)
     
     if not item:
@@ -66,20 +90,26 @@ async def wishlist_item_handler(callback: CallbackQuery):
         return
     
     status = "✅ Забрано" if item["is_taken"] else "🛒 Доступно"
-    text = f"🎁 {item['name']}\n\n"
+    index = item.get("display_index")
+    title = f"{index}. {item['name']}" if index is not None else item["name"]
+    text = f"<b>{title}</b>\n\n"
     
     if item["description"]:
-        text += f"{item['description']}\n\n"
+        text += f"<b>Комментарий:</b> {item['description']}\n\n"
     
-    text += f"Статус: {status}\n"
+    if item.get("price_hint"):
+        text += f"<b>Ориентировочная стоимость:</b> {item['price_hint']}\n\n"
     
     if item["link"]:
-        text += f"Ссылка: {item['link']}"
+        text += f"<b>Ссылка:</b> {item['link']}\n\n"
+    
+    text += f"<b>Статус:</b> {status}"
     
     await callback.message.edit_text(
         text,
         reply_markup=get_wishlist_item_keyboard(item_id, item["is_taken"]),
-        disable_web_page_preview=False
+        disable_web_page_preview=True,
+        parse_mode="HTML"
     )
     await callback.answer()
 
@@ -109,23 +139,38 @@ async def wishlist_take_handler(callback: CallbackQuery):
     
     # Обновляем информацию о товаре
     updated_item = await Database.fetchrow("""
-        SELECT id, name, description, link, is_taken
-        FROM wishlist_items
-        WHERE id = $1
+        SELECT *
+        FROM (
+            SELECT id,
+                   name,
+                   description,
+                   link,
+                   price_hint,
+                   is_taken,
+                   taken_by_user_id,
+                   ROW_NUMBER() OVER (ORDER BY is_taken, order_index, created_at) AS display_index
+            FROM wishlist_items
+        ) wi
+        WHERE wi.id = $1
     """, item_id)
     
     status = "✅ Забрано"
-    text = f"🎁 {updated_item['name']}\n\n"
+    index = updated_item.get("display_index")
+    title = f"{index}. {updated_item['name']}" if index is not None else updated_item["name"]
+    text = f"<b>{title}</b>\n\n"
     if updated_item["description"]:
-        text += f"{updated_item['description']}\n\n"
-    text += f"Статус: {status}\n"
+        text += f"<b>Комментарий:</b> {updated_item['description']}\n\n"
+    if updated_item.get("price_hint"):
+        text += f"<b>Ориентировочная стоимость:</b> {updated_item['price_hint']}\n\n"
     if updated_item["link"]:
-        text += f"Ссылка: {updated_item['link']}"
+        text += f"<b>Ссылка:</b> {updated_item['link']}\n\n"
+    text += f"<b>Статус:</b> {status}"
     
     await callback.message.edit_text(
         text,
         reply_markup=get_wishlist_item_keyboard(item_id, True),
-        disable_web_page_preview=False
+        disable_web_page_preview=True,
+        parse_mode="HTML"
     )
 
 
@@ -154,23 +199,38 @@ async def wishlist_untake_handler(callback: CallbackQuery):
     
     # Обновляем информацию о товаре
     updated_item = await Database.fetchrow("""
-        SELECT id, name, description, link, is_taken
-        FROM wishlist_items
-        WHERE id = $1
+        SELECT *
+        FROM (
+            SELECT id,
+                   name,
+                   description,
+                   link,
+                   price_hint,
+                   is_taken,
+                   taken_by_user_id,
+                   ROW_NUMBER() OVER (ORDER BY is_taken, order_index, created_at) AS display_index
+            FROM wishlist_items
+        ) wi
+        WHERE wi.id = $1
     """, item_id)
     
     status = "🛒 Доступно"
-    text = f"🎁 {updated_item['name']}\n\n"
+    index = updated_item.get("display_index")
+    title = f"{index}. {updated_item['name']}" if index is not None else updated_item["name"]
+    text = f"<b>{title}</b>\n\n"
     if updated_item["description"]:
-        text += f"{updated_item['description']}\n\n"
-    text += f"Статус: {status}\n"
+        text += f"<b>Комментарий:</b> {updated_item['description']}\n\n"
+    if updated_item.get("price_hint"):
+        text += f"<b>Ориентировочная стоимость:</b> {updated_item['price_hint']}\n\n"
     if updated_item["link"]:
-        text += f"Ссылка: {updated_item['link']}"
+        text += f"<b>Ссылка:</b> {updated_item['link']}\n\n"
+    text += f"<b>Статус:</b> {status}"
     
     await callback.message.edit_text(
         text,
         reply_markup=get_wishlist_item_keyboard(item_id, False),
-        disable_web_page_preview=False
+        disable_web_page_preview=True,
+        parse_mode="HTML"
     )
 
 
@@ -178,9 +238,16 @@ async def wishlist_untake_handler(callback: CallbackQuery):
 async def wishlist_list_handler(callback: CallbackQuery):
     """Обработчик возврата к списку товаров"""
     items = await Database.fetch("""
-        SELECT id, name, description, link, is_taken, taken_by_user_id
+        SELECT id,
+               name,
+               description,
+               link,
+               price_hint,
+               is_taken,
+               taken_by_user_id,
+               ROW_NUMBER() OVER (ORDER BY is_taken, order_index, created_at) AS display_index
         FROM wishlist_items
-        ORDER BY created_at DESC
+        ORDER BY is_taken, order_index, created_at
     """)
     
     items_list = [dict(item) for item in items]

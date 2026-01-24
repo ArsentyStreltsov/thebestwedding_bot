@@ -70,6 +70,8 @@ async def init_admin_db():
             name VARCHAR(500) NOT NULL,
             description TEXT,
             link VARCHAR(1000),
+            price_hint VARCHAR(255),
+            order_index INTEGER DEFAULT 0,
             is_taken BOOLEAN DEFAULT FALSE,
             taken_by_user_id BIGINT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -77,6 +79,13 @@ async def init_admin_db():
             FOREIGN KEY (taken_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
         )
     """)
+    # Обновляем существующую таблицу при необходимости
+    await AdminDatabase.execute(
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS price_hint VARCHAR(255)"
+    )
+    await AdminDatabase.execute(
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0"
+    )
     
     await AdminDatabase.execute("""
         CREATE TABLE IF NOT EXISTS wedding_info (
@@ -189,7 +198,7 @@ async def wishlist_page(request: Request):
         return RedirectResponse(url="/", status_code=303)
     
     items = await AdminDatabase.fetch(
-        "SELECT * FROM wishlist_items ORDER BY created_at DESC"
+        "SELECT * FROM wishlist_items ORDER BY is_taken, order_index, created_at"
     )
     return templates.TemplateResponse(
         "wishlist.html",
@@ -202,15 +211,25 @@ async def wishlist_add(
     request: Request,
     name: str = Form(...),
     description: str = Form(""),
-    link: str = Form("")
+    link: str = Form(""),
+    price_hint: str = Form(""),
+    order_index: int = Form(0)
 ):
     token = request.cookies.get("access_token")
     if not token:
         return RedirectResponse(url="/", status_code=303)
     
+    # Определяем order_index, если он не задан явно
+    if not order_index:
+        max_order = await AdminDatabase.fetchval(
+            "SELECT COALESCE(MAX(order_index), 0) FROM wishlist_items"
+        )
+        order_index = max_order + 1
+    
     await AdminDatabase.execute(
-        "INSERT INTO wishlist_items (name, description, link) VALUES ($1, $2, $3)",
-        name, description, link
+        "INSERT INTO wishlist_items (name, description, link, price_hint, order_index) "
+        "VALUES ($1, $2, $3, $4, $5)",
+        name, description, link, price_hint, order_index
     )
     return RedirectResponse(url="/wishlist", status_code=303)
 
@@ -231,15 +250,26 @@ async def wishlist_edit(
     item_id: int,
     name: str = Form(...),
     description: str = Form(""),
-    link: str = Form("")
+    link: str = Form(""),
+    price_hint: str = Form(""),
+    order_index: int = Form(0)
 ):
     token = request.cookies.get("access_token")
     if not token:
         return RedirectResponse(url="/", status_code=303)
     
     await AdminDatabase.execute(
-        "UPDATE wishlist_items SET name = $1, description = $2, link = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4",
-        name, description, link, item_id
+        """
+        UPDATE wishlist_items
+        SET name = $1,
+            description = $2,
+            link = $3,
+            price_hint = $4,
+            order_index = $5,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $6
+        """,
+        name, description, link, price_hint, order_index, item_id
     )
     return RedirectResponse(url="/wishlist", status_code=303)
 

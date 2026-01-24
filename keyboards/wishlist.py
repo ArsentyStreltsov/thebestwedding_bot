@@ -11,8 +11,14 @@ def get_wishlist_keyboard(items: list[dict], page: int = 0, items_per_page: int 
     page_items = items[start_idx:end_idx]
     
     for item in page_items:
-        status = "✅" if item.get("is_taken") else "🛒"
-        button_text = f"{status} {item.get('name', 'Без названия')}"
+        # Порядковый номер по всему списку
+        index = item.get("display_index")
+        if item.get("is_taken"):
+            # Для уже занятых показываем зелёную галочку вместо номера
+            button_text = f"✅ {item.get('name', 'Без названия')}"
+        else:
+            number_prefix = f"{index}. " if index is not None else ""
+            button_text = f"{number_prefix}{item.get('name', 'Без названия')}"
         keyboard_buttons.append([
             InlineKeyboardButton(
                 text=button_text,

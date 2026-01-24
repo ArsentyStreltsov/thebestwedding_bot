@@ -23,6 +23,8 @@ async def init_db() -> None:
             name VARCHAR(500) NOT NULL,
             description TEXT,
             link VARCHAR(1000),
+            price_hint VARCHAR(255),
+            order_index INTEGER DEFAULT 0,
             is_taken BOOLEAN DEFAULT FALSE,
             taken_by_user_id BIGINT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -30,6 +32,13 @@ async def init_db() -> None:
             FOREIGN KEY (taken_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
         )
     """)
+    # На случай уже существующей таблицы — добавляем недостающие колонки
+    await Database.execute(
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS price_hint VARCHAR(255)"
+    )
+    await Database.execute(
+        "ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0"
+    )
     
     # Таблица полезной информации
     await Database.execute("""

@@ -12,8 +12,14 @@
         <label for="description">Описание:</label>
         <textarea id="description" name="description"></textarea>
         
+        <label for="price_hint">Ориентировочная стоимость:</label>
+        <input type="text" id="price_hint" name="price_hint" placeholder="Например: 5 000 ₽">
+        
         <label for="link">Ссылка:</label>
         <input type="text" id="link" name="link" placeholder="https://...">
+        
+        <label for="order_index">Порядок в списке:</label>
+        <input type="number" id="order_index" name="order_index" min="0" placeholder="Оставьте пустым для автоматического">
         
         <button type="submit" class="btn">Добавить</button>
     </form>
@@ -24,23 +30,42 @@
     <table>
         <thead>
             <tr>
-                <th>ID</th>
+                <th>#</th>
                 <th>Название</th>
                 <th>Описание</th>
+                <th>Стоимость</th>
                 <th>Ссылка</th>
                 <th>Статус</th>
+                <th>Порядок</th>
                 <th>Действия</th>
             </tr>
         </thead>
         <tbody>
             {% for item in items %}
             <tr>
-                <td>{{ item.id }}</td>
-                <td>{{ item.name }}</td>
-                <td>{{ item.description[:50] if item.description else '-' }}{% if item.description and item.description|length > 50 %}...{% endif %}</td>
-                <td>{% if item.link %}<a href="{{ item.link }}" target="_blank">Ссылка</a>{% else %}-{% endif %}</td>
-                <td>{% if item.is_taken %}✅ Забрано{% else %}🛒 Доступно{% endif %}</td>
+                <td>{{ loop.index }}</td>
                 <td>
+                    <form method="POST" action="/wishlist/{{ item.id }}/edit">
+                        <input type="text" name="name" value="{{ item.name }}" required>
+                </td>
+                <td>
+                        <textarea name="description" rows="2">{{ item.description }}</textarea>
+                </td>
+                <td>
+                        <input type="text" name="price_hint" value="{{ item.price_hint or '' }}" placeholder="Например: 5 000 ₽">
+                </td>
+                <td>
+                        <input type="text" name="link" value="{{ item.link or '' }}" placeholder="https://...">
+                </td>
+                <td>
+                    {% if item.is_taken %}✅ Забрано{% else %}🛒 Доступно{% endif %}
+                </td>
+                <td>
+                        <input type="number" name="order_index" value="{{ item.order_index or 0 }}" min="0" style="width: 70px;">
+                </td>
+                <td>
+                        <button type="submit" class="btn">Сохранить</button>
+                    </form>
                     <form method="POST" action="/wishlist/{{ item.id }}/delete" style="display: inline;">
                         <button type="submit" class="btn btn-danger" onclick="return confirm('Удалить товар?')">Удалить</button>
                     </form>

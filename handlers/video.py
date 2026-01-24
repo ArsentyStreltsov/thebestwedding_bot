@@ -1,9 +1,11 @@
+import logging
 from aiogram import Router, F
 from aiogram.types import Message
 from keyboards.main_menu import get_main_menu_keyboard
 from messages import get_video_text
 from config import Config
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -19,13 +21,24 @@ async def video_handler(message: Message):
     # Если есть file_id видео, отправляем его
     if Config.VIDEO_FILE_ID:
         try:
+            logger.info(f"Отправка видео с file_id: {Config.VIDEO_FILE_ID[:20]}...")
             await message.answer_video(
                 Config.VIDEO_FILE_ID,
                 reply_markup=get_main_menu_keyboard()
             )
+            logger.info("Видео успешно отправлено")
         except Exception as e:
-            # Если file_id невалидный, просто игнорируем ошибку
-            pass
+            logger.error(f"Ошибка отправки видео: {e}")
+            # Пытаемся отправить пользователю сообщение об ошибке
+            try:
+                await message.answer(
+                    "❌ Не удалось отправить видео. Проверьте настройки бота.",
+                    reply_markup=get_main_menu_keyboard()
+                )
+            except:
+                pass
+    else:
+        logger.warning("VIDEO_FILE_ID не установлен в переменных окружения")
 
 
 @router.message(F.video)

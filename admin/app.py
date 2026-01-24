@@ -437,6 +437,19 @@ async def push_send(
     return RedirectResponse(url="/pushes", status_code=303)
 
 
+@app.post("/pushes/{push_id}/delete")
+async def push_delete(request: Request, push_id: int):
+    """Удаление пуша"""
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/", status_code=303)
+    
+    # Удаляем пуш (логи удалятся каскадно благодаря ON DELETE CASCADE)
+    await AdminDatabase.execute("DELETE FROM scheduled_pushes WHERE id = $1", push_id)
+    
+    return RedirectResponse(url="/pushes", status_code=303)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

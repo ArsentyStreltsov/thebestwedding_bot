@@ -48,6 +48,7 @@
                 <th>Отправлено</th>
                 <th>Статус</th>
                 <th>Статистика</th>
+                <th>Действия</th>
             </tr>
         </thead>
         <tbody>
@@ -71,6 +72,11 @@
                         {% if push.success_count is not none %} | ✅ {{ push.success_count }}{% endif %}
                         {% if push.fail_count is not none and push.fail_count > 0 %} | ❌ {{ push.fail_count }}{% endif %}
                     {% else %}-{% endif %}
+                </td>
+                <td>
+                    <form method="POST" action="/pushes/{{ push.id }}/delete" style="display: inline;">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Удалить этот пуш?')" title="Удалить">🗑</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}

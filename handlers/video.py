@@ -1,6 +1,6 @@
 import logging
 from aiogram import Router, F, Bot
-from aiogram.types import Message, URLInputFile
+from aiogram.types import Message
 from keyboards.main_menu import get_main_menu_keyboard
 from messages import get_video_text
 from config import Config
@@ -9,149 +9,103 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
-def get_telegram_file_url(file_path: str) -> str:
-    """
-    Формирует постоянный URL к файлу в Telegram через Bot API.
-    Этот URL работает постоянно и не устаревает.
-    """
-    return f"https://api.telegram.org/file/bot{Config.BOT_TOKEN}/{file_path}"
-
-
 @router.message(F.text == "🎥 Видео-приглашение")
-async def video_handler(message: Message, bot: Bot):
+async def video_handler(message: Message):
     """Обработчик раздела видео-приглашения"""
-    # Отправляем текст
-    await message.answer(
-        get_video_text(),
-        reply_markup=get_main_menu_keyboard()
-    )
     
-    # Приоритет отправки (от самого надежного к менее надежному):
-    # 1. VIDEO_FILE_PATH (постоянный путь через Telegram Bot API) - самый надежный
-    # 2. VIDEO_URL (внешний URL)
-    # 3. VIDEO_FILE_ID (временный file_id)
-    video_sent = False
+    # Проверяем наличие VIDEO_FILE_ID
+    if not Config.VIDEO_FILE_ID:
+        logger.warning("VIDEO_FILE_ID не установлен в конфигурации")
+        await message.answer(
+            "❌ Видео временно недоступно. Обратитесь к администратору.",
+            reply_markup=get_main_menu_keyboard()
+        )
+        return
     
-    # Вариант 1: Отправка по file_path через Telegram Bot API (постоянный, самый надежный)
-    if Config.VIDEO_FILE_PATH:
-        try:
-            logger.info(f"Отправка видео по file_path: {Config.VIDEO_FILE_PATH[:30]}...")
-            telegram_url = get_telegram_file_url(Config.VIDEO_FILE_PATH)
-            video_file = URLInputFile(telegram_url)
-            await message.answer_video(
-                video_file,
-                reply_markup=get_main_menu_keyboard()
-            )
-            logger.info("Видео успешно отправлено по file_path (Telegram Bot API)")
-            video_sent = True
-        except Exception as e:
-            logger.error(f"Ошибка отправки видео по file_path: {e}")
-    
-    # Вариант 2: Отправка по внешнему URL
-    if not video_sent and Config.VIDEO_URL:
-        try:
-            logger.info(f"Отправка видео по URL: {Config.VIDEO_URL[:50]}...")
-            video_file = URLInputFile(Config.VIDEO_URL)
-            await message.answer_video(
-                video_file,
-                reply_markup=get_main_menu_keyboard()
-            )
-            logger.info("Видео успешно отправлено по URL")
-            video_sent = True
-        except Exception as e:
-            logger.error(f"Ошибка отправки видео по URL: {e}")
-    
-    # Вариант 3: Отправка по file_id (временный, может устареть)
-    if not video_sent and Config.VIDEO_FILE_ID:
-        try:
-            logger.info(f"Отправка видео с file_id: {Config.VIDEO_FILE_ID[:20]}...")
-            await message.answer_video(
-                Config.VIDEO_FILE_ID,
-                reply_markup=get_main_menu_keyboard()
-            )
-            logger.info("Видео успешно отправлено по file_id")
-            video_sent = True
-        except Exception as e:
-            logger.error(f"Ошибка отправки видео по file_id: {e}")
-            # Если file_id устарел, предлагаем обновить
-            if "wrong file identifier" in str(e).lower():
-                logger.warning("file_id устарел, рекомендуется получить file_path")
-    
-    # Если ничего не сработало
-    if not video_sent:
-        logger.warning("Не удалось отправить видео: ни один способ не работает")
-        try:
+    # Отправка видео по file_id
+    try:
+        logger.info(f"Попытка отправки видео по file_id: {Config.VIDEO_FILE_ID[:20]}...")
+        await message.answer_video(
+            Config.VIDEO_FILE_ID,
+            caption=get_video_text(),  # Текст отправляется вместе с видео
+            reply_markup=get_main_menu_keyboard()
+        )
+        logger.info("✅ Видео успешно отправлено по file_id")
+        
+    except Exception as e:
+        error_msg = str(e).lower()
+        logger.error(f"❌ Ошибка отправки видео по file_id: {e}")
+        
+        # Определяем тип ошибки для более точного сообщения
+        if "wrong file identifier" in error_msg or "file not found" in error_msg:
+            logger.warning("⚠️ file_id устарел или неверный")
             await message.answer(
-                "❌ Не удалось отправить видео. Проверьте настройки бота.",
+                "❌ Не удалось отправить видео.\n\n"
+                "⚠️ file_id устарел или неверный.\n\n"
+                "💡 Решение: отправьте видео файлом боту заново и получите новый file_id.",
                 reply_markup=get_main_menu_keyboard()
             )
-        except:
-            pass
+        elif "bad request" in error_msg:
+            logger.warning("⚠️ Неверный запрос к Telegram API")
+            await message.answer(
+                "❌ Не удалось отправить видео.\n\n"
+                "⚠️ Проблема с запросом к Telegram API.\n\n"
+                "Проверьте настройки бота или обратитесь к администратору.",
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            logger.error(f"⚠️ Неизвестная ошибка при отправке видео: {e}")
+            await message.answer(
+                "❌ Не удалось отправить видео.\n\n"
+                "Возможные причины:\n"
+                "• file_id устарел\n"
+                "• Проблемы с Telegram API\n"
+                "• Неверные настройки бота\n\n"
+                "Проверьте настройки бота или обратитесь к администратору.",
+                reply_markup=get_main_menu_keyboard()
+            )
 
 
 @router.message(F.video)
 async def video_file_id_handler(message: Message, bot: Bot):
-    """Обработчик для получения file_id и file_path видео (для админов)"""
+    """Обработчик для получения file_id видео (для админов)"""
     # Проверяем, что отправитель - админ
     if message.from_user.id in Config.ADMIN_USER_IDS:
         video = message.video
         file_id = video.file_id
         
-        # Получаем file_path через Bot API (постоянный путь)
-        # ВАЖНО: работает только для файлов до 20 МБ!
-        file_path = None
-        file_too_big = False
-        try:
-            file_info = await bot.get_file(file_id)
-            file_path = file_info.file_path
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "too big" in error_msg or "file is too big" in error_msg:
-                file_too_big = True
-                logger.warning(f"Видео слишком большое (>20 МБ), getFile недоступен")
-            else:
-                logger.error(f"Ошибка получения file_path: {e}")
+        logger.info(f"Админ {message.from_user.id} отправил видео, получен file_id: {file_id[:20]}...")
         
         # Получаем размер файла для информации
         file_size_mb = None
         if video.file_size:
             file_size_mb = round(video.file_size / (1024 * 1024), 2)
+            logger.info(f"Размер видео: {file_size_mb} МБ")
         
         # Формируем ответ с информацией
-        response_text = f"📹 Информация о видео:\n\n"
+        response_text = f"📹 <b>Информация о видео:</b>\n\n"
         response_text += f"<b>file_id:</b>\n<code>{file_id}</code>\n\n"
         
         if file_size_mb:
             response_text += f"<b>Размер:</b> {file_size_mb} МБ\n\n"
         
-        if file_path:
-            telegram_url = get_telegram_file_url(file_path)
-            response_text += f"<b>file_path (постоянный, рекомендуется):</b>\n<code>{file_path}</code>\n\n"
-            response_text += f"<b>Постоянный URL:</b>\n<code>{telegram_url}</code>\n\n"
-            response_text += f"💡 <b>Добавьте в Railway Variables:</b>\n"
-            response_text += f"<code>VIDEO_FILE_PATH={file_path}</code>\n\n"
-            response_text += f"Этот путь <b>не устаревает</b> и работает постоянно! ✅"
-        elif file_too_big:
-            response_text += f"⚠️ <b>Видео слишком большое (>20 МБ)</b>\n\n"
-            response_text += f"Для больших видео нужно использовать <b>внешний URL</b>:\n\n"
-            response_text += f"1️⃣ Загрузите видео в облачное хранилище:\n"
-            response_text += f"   • Google Drive (публичная ссылка)\n"
-            response_text += f"   • Яндекс.Диск (публичная ссылка)\n"
-            response_text += f"   • Cloudflare R2 / AWS S3\n"
-            response_text += f"   • Или другой хостинг\n\n"
-            response_text += f"2️⃣ Получите прямую ссылку на файл (URL должен вести напрямую к .mp4)\n\n"
-            response_text += f"3️⃣ Добавьте в Railway Variables:\n"
-            response_text += f"<code>VIDEO_URL=https://ваш-хостинг.com/video.mp4</code>\n\n"
-            response_text += f"💡 <b>Временное решение:</b> Используйте file_id:\n"
-            response_text += f"<code>VIDEO_FILE_ID={file_id}</code>\n"
-            response_text += f"⚠️ Но он может устареть через несколько недель."
-        else:
-            response_text += f"⚠️ Не удалось получить file_path. Используйте:\n"
-            response_text += f"<code>VIDEO_FILE_ID={file_id}</code>\n\n"
-            response_text += f"⚠️ <b>Внимание:</b> file_id может устареть через несколько недель.\n\n"
-            response_text += f"💡 Для надежности лучше использовать <b>VIDEO_URL</b> с внешним хостингом."
+        response_text += f"✅ <b>Этот file_id можно использовать для файлов ЛЮБОГО размера!</b>\n\n"
+        response_text += f"💡 <b>Добавьте в Railway Variables:</b>\n"
+        response_text += f"<code>VIDEO_FILE_ID={file_id}</code>\n\n"
+        response_text += f"📌 <b>Как это работает:</b>\n"
+        response_text += f"• Telegram уже хранит это видео на своих серверах\n"
+        response_text += f"• file_id позволяет отправить его без повторной загрузки\n"
+        response_text += f"• Нет лимита на размер файла при использовании file_id\n"
+        response_text += f"• Отправка происходит мгновенно (из кеша Telegram)\n\n"
+        response_text += f"🎯 <b>Важно для стабильности:</b>\n"
+        response_text += f"• <b>file_id из входящих сообщений</b> (когда ты отправляешь боту) - более стабильные\n"
+        response_text += f"• <b>file_id из канала</b> - самые стабильные (работают годами)\n\n"
+        response_text += f"💡 <b>Рекомендация:</b> Для максимальной стабильности загрузи видео в канал, добавь бота как админа, и используй file_id из канала!"
         
         await message.answer(
             response_text,
             parse_mode="HTML"
         )
+        logger.info("✅ Информация о file_id отправлена админу")
+    else:
+        logger.debug(f"Пользователь {message.from_user.id} отправил видео, но он не админ - игнорируем")

@@ -28,6 +28,9 @@ class Config:
     # Settings
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
     
+    # Logs Group (для отправки важных логов и ошибок)
+    LOGS_GROUP_ID: str = os.getenv("LOGS_GROUP_ID", "")  # ID группы для логов (например: -1001234567890)
+    
     # Video
     VIDEO_FILE_ID: str = os.getenv("VIDEO_FILE_ID", "")  # file_id видео из Telegram (БЕЗ лимита размера)
     

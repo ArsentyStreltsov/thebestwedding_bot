@@ -7,16 +7,21 @@ import logging
 import time
 from datetime import datetime
 from typing import List, Tuple, Optional
+import sys
+import os
 
 import httpx
 
+# Добавляем корневую директорию в путь для импорта utils
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from admin.database import AdminDatabase
 from admin.config import AdminConfig
-
+from utils.telegram_logger import send_to_logs_group, init_telegram_logger, close_telegram_logger
 
 logger = logging.getLogger("push_scheduler")
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,  # Только ошибки
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 )
 
@@ -174,27 +179,42 @@ async def process_push(push: dict) -> None:
         push_id, status, success, fail, last_error
     )
 
-    logger.info(f"Push {push_id}: total={total}, success={success}, fail={fail}, status={status}")
+    # Логируем только если есть ошибки
+    if fail > 0:
+        error_msg = (
+            f"⚠️ <b>Ошибки при отправке пуша #{push_id}</b>\n\n"
+            f"Всего получателей: {total}\n"
+            f"✅ Успешно: {success}\n"
+            f"❌ Ошибок: {fail}\n"
+            f"Статус: {status}"
+        )
+        logger.error(f"Push {push_id}: {fail} failures out of {total}")
+        await send_to_logs_group(error_msg)
 
 
 async def run_scheduler_forever():
     """Основной цикл scheduler"""
     AdminConfig.validate()
     await AdminDatabase.create_pool()
+    await init_telegram_logger()
 
-    logger.info("🚀 Scheduler started")
-    while True:
-        try:
-            push = await claim_next_push()
-            if not push:
+    try:
+        while True:
+            try:
+                push = await claim_next_push()
+                if not push:
+                    await asyncio.sleep(POLL_INTERVAL_SEC)
+                    continue
+
+                await process_push(push)
+
+            except Exception as e:
+                error_msg = f"❌ <b>Критическая ошибка в scheduler:</b>\n\n<code>{str(e)}</code>"
+                logger.exception(f"Scheduler loop error: {e}")
+                await send_to_logs_group(error_msg)
                 await asyncio.sleep(POLL_INTERVAL_SEC)
-                continue
-
-            await process_push(push)
-
-        except Exception as e:
-            logger.exception(f"Scheduler loop error: {e}")
-            await asyncio.sleep(POLL_INTERVAL_SEC)
+    finally:
+        await close_telegram_logger()
 
 
 if __name__ == "__main__":

@@ -452,4 +452,17 @@ async def push_delete(request: Request, push_id: int):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import logging
+    
+    # Настройка логирования - только ошибки
+    logging.basicConfig(level=logging.ERROR)
+    logging.getLogger("uvicorn").setLevel(logging.CRITICAL)
+    logging.getLogger("uvicorn.access").setLevel(logging.CRITICAL)
+    logging.getLogger("fastapi").setLevel(logging.CRITICAL)
+    
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=8000,
+        log_level="error"
+    )

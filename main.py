@@ -8,27 +8,43 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from config import Config
 from database import Database, init_db
 from handlers import start_router, wishlist_router, info_router, dresscode_router, disclaimer_router, video_router
+from utils.telegram_logger import TelegramGroupHandler, init_telegram_logger, close_telegram_logger
 
 # Scheduler теперь запускается отдельным процессом/воркером
 # Не импортируем его здесь, чтобы избежать дублирования
 
-# Настройка логирования
+# Настройка логирования - только ошибки
 logging.basicConfig(
-    level=logging.ERROR if not Config.DEBUG else logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%H:%M:%S"
+    level=logging.ERROR,  # Только ошибки
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[
+        logging.StreamHandler(sys.stderr)
+    ]
 )
 logger = logging.getLogger(__name__)
 
-# Уменьшаем уровень логирования для библиотек
-logging.getLogger("aiogram").setLevel(logging.ERROR)
-logging.getLogger("asyncpg").setLevel(logging.ERROR)
-logging.getLogger("aiohttp").setLevel(logging.ERROR)
-logging.getLogger("aiohttp.access").setLevel(logging.ERROR)
+# Полностью отключаем логи для библиотек
+logging.getLogger("aiogram").setLevel(logging.CRITICAL)
+logging.getLogger("asyncpg").setLevel(logging.CRITICAL)
+logging.getLogger("aiohttp").setLevel(logging.CRITICAL)
+logging.getLogger("aiohttp.access").setLevel(logging.CRITICAL)
+logging.getLogger("uvicorn").setLevel(logging.CRITICAL)
+logging.getLogger("uvicorn.access").setLevel(logging.CRITICAL)
+logging.getLogger("fastapi").setLevel(logging.CRITICAL)
+
+# Добавляем handler для отправки ошибок в Telegram группу
+if Config.LOGS_GROUP_ID:
+    telegram_handler = TelegramGroupHandler()
+    telegram_handler.setLevel(logging.ERROR)
+    logging.getLogger().addHandler(telegram_handler)
 
 
 async def on_startup(bot: Bot) -> None:
     """Выполняется при запуске бота"""
+    # Инициализируем Telegram logger
+    await init_telegram_logger()
+    
     # Убираем слеш в конце WEBHOOK_HOST, если он есть
     host = Config.WEBHOOK_HOST.rstrip('/')
     # Формируем правильный URL
@@ -42,6 +58,7 @@ async def on_startup(bot: Bot) -> None:
 async def on_shutdown(bot: Bot) -> None:
     """Выполняется при остановке бота"""
     await bot.session.close()
+    await close_telegram_logger()
 
 
 async def init_bot():

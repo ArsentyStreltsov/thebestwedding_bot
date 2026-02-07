@@ -109,3 +109,20 @@ async def video_file_id_handler(message: Message, bot: Bot):
         logger.info("✅ Информация о file_id отправлена админу")
     else:
         logger.debug(f"Пользователь {message.from_user.id} отправил видео, но он не админ - игнорируем")
+
+
+@router.message(F.photo)
+async def photo_file_id_handler(message: Message, bot: Bot):
+    """Обработчик для получения file_id фото (для админов) — для рассылок с фото"""
+    if message.from_user.id not in Config.ADMIN_USER_IDS:
+        return
+    # Берём фото наибольшего размера
+    photo = message.photo[-1]
+    file_id = photo.file_id
+    response_text = (
+        f"🖼 <b>Photo file_id для рассылки</b>\n\n"
+        f"<b>file_id:</b>\n<code>{file_id}</code>\n\n"
+        f"💡 Вставьте этот file_id в поле «Photo file_id» в админке при создании рассылки — "
+        f"сообщение уйдёт с этим фото и текстом подписью."
+    )
+    await message.answer(response_text, parse_mode="HTML")

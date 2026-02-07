@@ -74,6 +74,9 @@ async def init_admin_db():
     await AdminDatabase.execute(
         "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS fail_count INT DEFAULT 0"
     )
+    await AdminDatabase.execute(
+        "ALTER TABLE scheduled_pushes ADD COLUMN IF NOT EXISTS photo_file_id VARCHAR(500)"
+    )
     
     # Обновляем существующие записи
     await AdminDatabase.execute("""
@@ -387,7 +390,8 @@ async def push_send(
     message: str = Form(...),
     send_to_all: bool = Form(False),
     target_user_ids: str = Form(""),
-    scheduled_at: str = Form("")
+    scheduled_at: str = Form(""),
+    photo_file_id: str = Form("")
 ):
     token = request.cookies.get("access_token")
     if not token:
@@ -428,13 +432,72 @@ async def push_send(
     
     # Всегда создаём запись в БД со статусом 'pending'
     # Scheduler заберёт и отправит (единый путь для всех пушей)
+    photo_file_id_val = (photo_file_id or "").strip() or None
     await AdminDatabase.execute(
-        """INSERT INTO scheduled_pushes (message, send_to_all, target_user_ids, scheduled_at, status)
-           VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), 'pending')""",
-        message, send_to_all, user_ids_array, scheduled_time
+        """INSERT INTO scheduled_pushes (message, send_to_all, target_user_ids, scheduled_at, status, photo_file_id)
+           VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), 'pending', $5)""",
+        message, send_to_all, user_ids_array, scheduled_time, photo_file_id_val
     )
     
     return RedirectResponse(url="/pushes", status_code=303)
+
+
+@app.get("/pushes/{push_id}/logs", response_class=HTMLResponse)
+async def push_logs_page(request: Request, push_id: int):
+    """Страница с детальным логом доставки по пушу: кому доставлено, кому нет"""
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/", status_code=303)
+
+    push = await AdminDatabase.fetchrow(
+        "SELECT id, message, status, total_targets, success_count, fail_count, sent_at FROM scheduled_pushes WHERE id = $1",
+        push_id
+    )
+    if not push:
+        raise HTTPException(status_code=404, detail="Пуш не найден")
+
+    logs = await AdminDatabase.fetch(
+        """
+        SELECT l.user_id, l.status, l.error, l.duration_ms, l.created_at,
+               u.first_name, u.last_name, u.username
+        FROM push_delivery_logs l
+        LEFT JOIN users u ON u.user_id = l.user_id
+        WHERE l.push_id = $1
+        ORDER BY l.status DESC, l.user_id
+        """,
+        push_id
+    )
+
+    push_dict = dict(push)
+    logs_list = []
+    for row in logs:
+        r = dict(row)
+        if r.get("created_at"):
+            ct = r["created_at"]
+            if isinstance(ct, datetime):
+                if ct.tzinfo is None:
+                    ct = ct.replace(tzinfo=timezone.utc)
+                r["created_at"] = ct.astimezone(MOSCOW_TZ).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                r["created_at"] = str(ct)[:19]
+        else:
+            r["created_at"] = ""
+        logs_list.append(r)
+
+    if push_dict.get("sent_at") and isinstance(push_dict["sent_at"], datetime):
+        st = push_dict["sent_at"]
+        if st.tzinfo is None:
+            st = st.replace(tzinfo=timezone.utc)
+        push_dict["sent_at"] = st.astimezone(MOSCOW_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+    return templates.TemplateResponse(
+        "push_logs.html",
+        {
+            "request": request,
+            "push": push_dict,
+            "logs": logs_list
+        }
+    )
 
 
 @app.post("/pushes/{push_id}/delete")

@@ -73,17 +73,38 @@ async def get_recipients(send_to_all: bool, target_user_ids) -> List[int]:
     return [int(target_user_ids)]
 
 
-async def send_one(client: httpx.AsyncClient, user_id: int, message: str) -> Tuple[bool, Optional[str], int]:
+async def send_one(
+    client: httpx.AsyncClient,
+    user_id: int,
+    message: str,
+    photo_file_id: Optional[str] = None
+) -> Tuple[bool, Optional[str], int]:
     """
-    Отправляет 1 сообщение. Возвращает: ok, error_text, duration_ms
+    Отправляет 1 сообщение. Если передан photo_file_id — отправляет фото с подписью (caption),
+    иначе обычное текстовое сообщение. Возвращает: ok, error_text, duration_ms
     """
     start = time.perf_counter()
+    photo_file_id = (photo_file_id or "").strip() or None
+
     try:
-        resp = await client.post(
-            f"https://api.telegram.org/bot{AdminConfig.BOT_TOKEN}/sendMessage",
-            json={"chat_id": user_id, "text": message, "parse_mode": "HTML"},
-            timeout=HTTP_TIMEOUT
-        )
+        if photo_file_id:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{AdminConfig.BOT_TOKEN}/sendPhoto",
+                json={
+                    "chat_id": user_id,
+                    "photo": photo_file_id,
+                    "caption": message,
+                    "parse_mode": "HTML"
+                },
+                timeout=HTTP_TIMEOUT
+            )
+        else:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{AdminConfig.BOT_TOKEN}/sendMessage",
+                json={"chat_id": user_id, "text": message, "parse_mode": "HTML"},
+                timeout=HTTP_TIMEOUT
+            )
+
         duration_ms = int((time.perf_counter() - start) * 1000)
 
         if resp.status_code != 200:
@@ -105,6 +126,7 @@ async def process_push(push: dict) -> None:
     message = push["message"]
     send_to_all = push["send_to_all"]
     target_user_ids = push.get("target_user_ids")
+    photo_file_id = push.get("photo_file_id")
 
     recipients = await get_recipients(send_to_all, target_user_ids)
     total = len(recipients)
@@ -134,7 +156,7 @@ async def process_push(push: dict) -> None:
 
     async def guarded_send(uid: int):
         async with sem:
-            return uid, await send_one(client, uid, message)
+            return uid, await send_one(client, uid, message, photo_file_id)
 
     success = 0
     fail = 0
@@ -179,17 +201,46 @@ async def process_push(push: dict) -> None:
         push_id, status, success, fail, last_error
     )
 
-    # Логируем только если есть ошибки
+    # Отправляем отчёт в группу логов: всегда по итогам рассылки
+    try:
+        if fail == 0:
+            report = (
+                f"✅ <b>Пуш #{push_id}</b> доставлен всем <b>{total}</b> получателям."
+            )
+        else:
+            # Получаем список неудачных доставок с именами
+            failed_rows = await AdminDatabase.fetch(
+                """
+                SELECT l.user_id, l.error, u.first_name, u.last_name, u.username
+                FROM push_delivery_logs l
+                LEFT JOIN users u ON u.user_id = l.user_id
+                WHERE l.push_id = $1 AND l.status = 'failed'
+                ORDER BY l.user_id
+                """,
+                push_id
+            )
+            lines = []
+            for r in failed_rows:
+                first = r.get("first_name") or ""
+                last = (r.get("last_name") or "").strip()
+                name = f"{first} {last}".strip() or "—"
+                username = f"@{r['username']}" if r.get("username") else "нет username"
+                err = (r.get("error") or "—")[:200]
+                lines.append(f"• <code>{r['user_id']}</code> {name} ({username}): {err}")
+            failed_block = "\n".join(lines)
+            report = (
+                f"⚠️ <b>Пуш #{push_id}</b>\n\n"
+                f"Всего: {total} | ✅ Доставлено: {success} | ❌ Не доставлено: {fail}\n\n"
+                f"<b>Кому не доставлено:</b>\n{failed_block}"
+            )
+            if len(report) > 4000:
+                report = report[:3970] + "\n\n… (обрезано, полный список в админке: Пуши → Лог)"
+        await send_to_logs_group(report)
+    except Exception as e:
+        logger.error(f"Не удалось отправить отчёт в группу: {e}")
+
     if fail > 0:
-        error_msg = (
-            f"⚠️ <b>Ошибки при отправке пуша #{push_id}</b>\n\n"
-            f"Всего получателей: {total}\n"
-            f"✅ Успешно: {success}\n"
-            f"❌ Ошибок: {fail}\n"
-            f"Статус: {status}"
-        )
         logger.error(f"Push {push_id}: {fail} failures out of {total}")
-        await send_to_logs_group(error_msg)
 
 
 async def run_scheduler_forever():

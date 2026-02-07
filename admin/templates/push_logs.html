@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Лог доставки — Пуш #{{ push.id }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Лог доставки — Пуш #{{ push.id }}</h2>
+    <p><strong>Статус:</strong>
+        {% if push.status == 'sent' %}✅ Отправлено
+        {% elif push.status == 'sent_with_errors' %}⚠️ Отправлено с ошибками
+        {% elif push.status == 'failed' %}❌ Ошибка
+        {% else %}{{ push.status }}{% endif %}
+    </p>
+    <p><strong>Всего получателей:</strong> {{ push.total_targets or 0 }}
+        {% if push.success_count is not none %} | ✅ Доставлено: {{ push.success_count }}{% endif %}
+        {% if push.fail_count is not none and push.fail_count > 0 %} | ❌ Не доставлено: {{ push.fail_count }}{% endif %}
+    </p>
+    {% if push.sent_at %}<p><strong>Время отправки:</strong> {{ push.sent_at }}</p>{% endif %}
+    <p><a href="/pushes" class="btn">← К списку пушей</a></p>
+</div>
+
+<div class="card">
+    <h2>Детали по каждому получателю</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>user_id</th>
+                <th>Имя</th>
+                <th>Username</th>
+                <th>Статус</th>
+                <th>Ошибка</th>
+                <th>Время</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td><code>{{ log.user_id }}</code></td>
+                <td>{{ log.first_name or '' }} {{ log.last_name or '' }}</td>
+                <td>{% if log.username %}@{{ log.username }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if log.status == 'sent' %}✅ Доставлено
+                    {% else %}❌ Не доставлено{% endif %}
+                </td>
+                <td style="max-width: 300px; word-break: break-all;">{% if log.error %}{{ log.error }}{% else %}—{% endif %}</td>
+                <td>{{ log.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if not logs %}
+    <p>Записей о доставке пока нет (рассылка ещё не обработана или нет получателей).</p>
+    {% endif %}
+</div>
+{% endblock %}

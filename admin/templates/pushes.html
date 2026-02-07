@@ -6,7 +6,11 @@
 <div class="card">
     <h2>Отправить пуш</h2>
     <form method="POST" action="/pushes/send">
-        <label for="message">Сообщение:</label>
+        <label for="photo_file_id">Photo file_id (необязательно):</label>
+        <input type="text" id="photo_file_id" name="photo_file_id" placeholder="AgACAgIAAxkBAAI... (получите, отправив фото боту)">
+        <small style="color: #6b7280; display: block; margin-bottom: 1rem;">Отправьте фото своему боту в Telegram (от имени админа) — бот пришлёт file_id. Вставьте его сюда: рассылка уйдёт с фото, текст будет подписью (caption).</small>
+        
+        <label for="message">Сообщение (текст рассылки):</label>
         <textarea id="message" name="message" required placeholder="Введите текст сообщения..."></textarea>
         
         <label>
@@ -74,6 +78,9 @@
                     {% else %}-{% endif %}
                 </td>
                 <td>
+                    {% if push.status in ['sent', 'sent_with_errors', 'failed'] %}
+                    <a href="/pushes/{{ push.id }}/logs" class="btn" title="Лог доставки">📋 Лог</a>
+                    {% endif %}
                     <form method="POST" action="/pushes/{{ push.id }}/delete" style="display: inline;">
                         <button type="submit" class="btn btn-danger" onclick="return confirm('Удалить этот пуш?')" title="Удалить">🗑</button>
                     </form>

@@ -103,6 +103,17 @@ async def main():
         # Создаём веб-приложение
         app = web.Application()
         
+        # Middleware: логируем любые необработанные исключения в webhook (уйдут в группу через TelegramGroupHandler)
+        @web.middleware
+        async def error_logging_middleware(request, handler):
+            try:
+                return await handler(request)
+            except Exception as e:
+                logger.error(f"Необработанное исключение в webhook: {e}", exc_info=True)
+                raise
+        
+        app.middlewares.append(error_logging_middleware)
+        
         # Настраиваем webhook
         webhook_requests_handler = SimpleRequestHandler(
             dispatcher=dp,

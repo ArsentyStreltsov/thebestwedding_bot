@@ -34,9 +34,6 @@ class Config:
     # Video
     VIDEO_FILE_ID: str = os.getenv("VIDEO_FILE_ID", "")  # file_id видео из Telegram (БЕЗ лимита размера)
     
-    # Calendar Server URL for .ics file
-    CALENDAR_SERVER_URL: str = os.getenv("CALENDAR_SERVER_URL", "")  # URL календарного сервера на Railway
-    
     # Webhook
     WEBHOOK_HOST: str = os.getenv("WEBHOOK_HOST", "")  # URL для webhook (например: https://your-app.railway.app)
     # Путь для webhook (должен начинаться с / или быть пустым)

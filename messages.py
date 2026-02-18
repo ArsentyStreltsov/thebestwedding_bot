@@ -157,22 +157,6 @@ def get_google_calendar_url() -> str:
     return url
 
 
-def get_apple_calendar_url() -> str:
-    """Возвращает URL для добавления события в Apple Calendar (через .ics файл на Railway)"""
-    from config import Config
-    
-    # URL веб-сервера на Railway, который отдаёт .ics файл
-    calendar_server_url = Config.CALENDAR_SERVER_URL
-    
-    # Если URL не установлен, возвращаем пустую строку (кнопка не будет показана)
-    if not calendar_server_url:
-        return ""
-    
-    # На iOS/macOS https:// ссылка на .ics файл откроется напрямую в приложении календаря
-    # с предзаполненными данными благодаря правильным заголовкам сервера
-    return f"{calendar_server_url}/wedding.ics"
-
-
 def get_wishlist_empty_text() -> str:
     """Возвращает текст, когда виш-лист пуст"""
     return "Виш-лист пока пуст. Скоро здесь появятся подарки! 🎁"

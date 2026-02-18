@@ -32,8 +32,6 @@ pip3 install -r requirements.txt
 - `ADMIN_USERNAME` - логин для веб-админки (по умолчанию: `admin`)
 - `ADMIN_PASSWORD` - пароль для веб-админки (обязательно!)
 - `SECRET_KEY` - секретный ключ для JWT токенов (любая случайная строка)
-- `CALENDAR_SERVER_URL` - URL календарного сервера на Railway (опционально, для Apple Calendar)
-
 ## Запуск
 
 ### Локальная разработка (с ngrok)
@@ -88,7 +86,6 @@ thebestwedding_bot/
 │   ├── app.py
 │   ├── auth.py
 │   └── templates/
-├── calendar_server.py   # Сервер для Apple Calendar (.ics файлы)
 ├── requirements.txt
 ├── Procfile             # Для Railway
 └── README.md

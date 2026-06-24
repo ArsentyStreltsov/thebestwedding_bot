@@ -1,0 +1,53 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync code and restart
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+
+          rsync -avz \
+            --exclude '.env' \
+            --exclude '.env.local' \
+            --exclude 'venv/' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            --exclude '.git/' \
+            --exclude '*.sql' \
+            --exclude '*.dump' \
+            --exclude 'backups/' \
+            -e "ssh -o StrictHostKeyChecking=yes" \
+            ./ "${SERVER_USER}@${SERVER_HOST}:/home/botapp/thebestwedding_bot/"
+
+          ssh -o StrictHostKeyChecking=yes "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
+            chown -R botapp:botapp /home/botapp/thebestwedding_bot
+            sudo -u botapp bash -c '
+              cd /home/botapp/thebestwedding_bot
+              if [ ! -d venv ]; then
+                python3 -m venv venv
+              fi
+              source venv/bin/activate
+              pip install -r requirements.txt -q
+            '
+            systemctl restart thebestwedding-bot
+            systemctl restart thebestwedding-admin
+            systemctl is-active thebestwedding-bot
+            systemctl is-active thebestwedding-admin
+            echo "Deploy successful"
+          EOF

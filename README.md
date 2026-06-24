@@ -25,13 +25,8 @@ source venv/bin/activate  # На Windows: venv\Scripts\activate
 pip3 install -r requirements.txt
 ```
 
-3. Создайте файл `.env` и укажите:
-- `BOT_TOKEN` - токен вашего Telegram бота (получить у @BotFather)
-- `DATABASE_URL` - строка подключения к PostgreSQL
-- `ADMIN_USER_IDS` - ID администраторов через запятую (опционально)
-- `ADMIN_USERNAME` - логин для веб-админки (по умолчанию: `admin`)
-- `ADMIN_PASSWORD` - пароль для веб-админки (обязательно!)
-- `SECRET_KEY` - секретный ключ для JWT токенов (любая случайная строка)
+3. Скопируйте `.env.example` в `.env` и заполните переменные.
+
 ## Запуск
 
 ### Локальная разработка (с ngrok)
@@ -43,131 +38,80 @@ pip3 install -r requirements.txt
 ./run_local_webhook.sh
 
 # Или вручную:
-# 1. Запустите ngrok: ngrok http 8001
+# 1. Запустите ngrok: ngrok http 8002
 # 2. Добавьте в .env.local: WEBHOOK_HOST=https://your-ngrok-url.ngrok.io
 # 3. Запустите бота: python3 main.py
 ```
 
-Подробная инструкция в файле `WEBHOOK_SETUP.md`
+### Продакшн (Hetzner)
 
-### Продакшн (Railway)
+Полная инструкция по переносу: [`docs/MIGRATION_GUIDE.md`](docs/MIGRATION_GUIDE.md)
 
-Бот автоматически запускается через webhook на Railway. Убедитесь, что в переменных окружения указан `WEBHOOK_HOST`.
+Кратко:
+- Webhook-бот: `main.py` (systemd `thebestwedding-bot`, порт `8002`)
+- Админка: `python -m admin.main` (systemd `thebestwedding-admin`, порт `8003`)
+- Пуши отправляются **сразу из админки** — отдельного scheduler/worker нет
+- Деплой: `git push origin main` → GitHub Actions
 
 ## База данных
 
 Бот использует PostgreSQL. При первом запуске автоматически создаются необходимые таблицы:
 - `users` - пользователи бота
 - `wishlist_items` - товары виш-листа
-- `scheduled_pushes` - запланированные сообщения
+- `scheduled_pushes` - история рассылок
 - `admin_users` - пользователи админ-панели
-- `quizzes`, `quiz_questions`, `quiz_answers` - таблицы для будущего функционала викторин
 
 ## Структура проекта
 
 ```
 thebestwedding_bot/
-├── main.py              # Точка входа
+├── main.py              # Точка входа (webhook)
 ├── config.py            # Конфигурация
 ├── database/            # Работа с БД
-│   ├── connection.py
-│   └── models.py
 ├── handlers/            # Обработчики сообщений
-│   ├── start.py
-│   ├── wishlist.py
-│   ├── info.py
-│   ├── dresscode.py
-│   ├── disclaimer.py
-│   └── video.py
 ├── keyboards/           # Клавиатуры
-│   ├── main_menu.py
-│   └── wishlist.py
 ├── admin/               # Админ-панель
 │   ├── app.py
-│   ├── auth.py
+│   ├── push_sender.py   # Немедленная отправка пушей
 │   └── templates/
-├── requirements.txt
-├── Procfile             # Для Railway
-└── README.md
+├── scripts/deploy-server.sh
+├── .github/workflows/deploy.yml
+├── docs/MIGRATION_GUIDE.md
+└── requirements.txt
 ```
 
 ## Деплой на GitHub
 
-Используйте стандартные команды Git:
 ```bash
-git add .
-git commit -m "описание изменений"
-git push
+./deploy.sh "описание изменений"
+# или
+git push origin main
 ```
 
-⚠️ **Важно**: Убедитесь, что `.env` и `.env.local` файлы не попадут в коммит (они в `.gitignore`)
+⚠️ **Важно**: `.env` и `.env.local` не должны попадать в git (они в `.gitignore`).
 
 ## Админ-панель
 
-Веб-интерфейс для управления ботом доступен по адресу `/admin` или на отдельном порту.
+Веб-интерфейс для управления ботом: виш-лист и рассылки.
 
-### Локальный запуск админки
+### Локальный запуск
 
-**Важно**: Перед запуском убедитесь, что в `.env` файле указаны все необходимые переменные:
-
-```env
-BOT_TOKEN=ваш_токен
-DATABASE_URL=postgresql://...
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=ваш_пароль
-SECRET_KEY=случайная_строка_для_jwt
-```
-
-Запуск (из корня проекта):
 ```bash
-# Вариант 1: Запуск напрямую
-python3 admin/main.py
-
-# Вариант 2: Запуск как модуль (рекомендуется)
 python3 -m admin.main
+# http://localhost:8003
 ```
 
-Админка будет доступна по адресу: `http://localhost:8000`
-
-**Примечание**: 
-- Используется тот же `.env` файл, что и для бота. Просто добавьте переменные `ADMIN_USERNAME`, `ADMIN_PASSWORD` и `SECRET_KEY`.
-- Запускайте из корневой директории проекта (где находится `main.py` и папка `admin/`)
-
-### Функционал админки
+### Функционал
 
 - **Виш-лист**: добавление, редактирование, удаление товаров
-- **Пуши**: отправка сообщений всем пользователям или выборочно, с возможностью планирования
+- **Пуши**: немедленная отправка всем или выборочно (с фото и логом доставки)
 
 ### Авторизация
 
-По умолчанию используется логин и пароль из переменных окружения:
 - `ADMIN_USERNAME` (по умолчанию: `admin`)
-- `ADMIN_PASSWORD` (обязательно установите!)
-
-Также нужен `SECRET_KEY` для JWT токенов (можно сгенерировать случайную строку).
-
-## Развертывание на Railway
-
-### Настройка на Railway
-
-1. Подключите репозиторий к Railway
-2. **Важно**: Файл `runtime.txt` уже настроен для использования Python 3.12
-3. Добавьте переменные окружения:
-   - `BOT_TOKEN` - токен вашего Telegram бота
-   - `DATABASE_URL` - используйте Variable Reference: `${{Postgres.DATABASE_URL}}`
-   - `WEBHOOK_HOST` - URL вашего приложения на Railway (Railway автоматически создаст, но нужно обновить после первого деплоя)
-   - `WEBHOOK_PATH` - путь для webhook (по умолчанию: `/webhook`)
-   - `ADMIN_USERNAME` - логин для админки (по умолчанию: `admin`)
-   - `ADMIN_PASSWORD` - пароль для админки (обязательно!)
-   - `SECRET_KEY` - секретный ключ для JWT (любая случайная строка)
-   - `DEBUG=False`
-4. Railway автоматически определит Python проект и установит зависимости
-5. Убедитесь, что PostgreSQL добавлен как сервис
-6. При первом запуске таблицы создадутся автоматически
-7. **После первого деплоя:** Обновите `WEBHOOK_HOST` в переменных окружения, указав реальный URL вашего приложения на Railway
-
-**Примечание**: Railway автоматически устанавливает переменную `PORT`, которая используется ботом. Файл `Procfile` настроен для запуска бота через webhook. Подробная инструкция по настройке webhook в файле `WEBHOOK_SETUP.md`.
+- `ADMIN_PASSWORD` (обязательно)
+- `SECRET_KEY` для JWT
 
 ## Безопасность
 
-⚠️ **Важно**: Никогда не коммитьте файл `.env` в репозиторий! Он уже добавлен в `.gitignore`.
+⚠️ Никогда не коммитьте `.env` в репозиторий.

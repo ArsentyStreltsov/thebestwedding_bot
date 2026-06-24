@@ -32,11 +32,7 @@
             </div>
         </div>
         
-        <label for="scheduled_at" style="margin-top: 1rem;">Запланировать на время (оставьте пустым для немедленной отправки):</label>
-        <input type="datetime-local" id="scheduled_at" name="scheduled_at">
-        <small style="color: #6b7280; display: block; margin-top: 0.25rem;">⏰ Время указывается в московском часовом поясе (UTC+3)</small>
-        
-        <button type="submit" class="btn">Отправить</button>
+        <button type="submit" class="btn">Отправить сейчас</button>
     </form>
 </div>
 
@@ -48,7 +44,6 @@
                 <th>ID</th>
                 <th>Сообщение</th>
                 <th>Получатели</th>
-                <th>Запланировано</th>
                 <th>Отправлено</th>
                 <th>Статус</th>
                 <th>Статистика</th>
@@ -61,7 +56,6 @@
                 <td>{{ push.id }}</td>
                 <td>{{ push.message[:50] }}{% if push.message|length > 50 %}...{% endif %}</td>
                 <td>{% if push.send_to_all %}Всем{% else %}Выборочно{% endif %}</td>
-                <td>{% if push.scheduled_at %}{{ push.scheduled_at }}{% else %}-{% endif %}</td>
                 <td>{% if push.sent_at %}{{ push.sent_at }}{% else %}-{% endif %}</td>
                 <td>
                     {% if push.status == 'sent' %}✅ Отправлено

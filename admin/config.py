@@ -17,6 +17,10 @@ class AdminConfig:
     
     # Telegram Bot (для отправки пушей)
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+
+    # Сеть админки (на Hetzner — 127.0.0.1, снаружи через Nginx)
+    HOST: str = os.getenv("ADMIN_HOST", os.getenv("HOST", "127.0.0.1"))
+    PORT: int = int(os.getenv("ADMIN_PORT", "8003"))
     
     @classmethod
     def validate(cls) -> bool:

@@ -8,6 +8,7 @@ from typing import Optional, List
 from admin.database import AdminDatabase
 from admin.auth import verify_password, get_password_hash, create_access_token, verify_token
 from admin.config import AdminConfig
+from admin.push_sender import process_push
 import httpx
 
 # Московское время (UTC+3)
@@ -390,55 +391,30 @@ async def push_send(
     message: str = Form(...),
     send_to_all: bool = Form(False),
     target_user_ids: str = Form(""),
-    scheduled_at: str = Form(""),
     photo_file_id: str = Form("")
 ):
     token = request.cookies.get("access_token")
     if not token:
         return RedirectResponse(url="/", status_code=303)
-    
-    # Парсим target_user_ids
+
     user_ids = []
     if not send_to_all and target_user_ids:
         user_ids = [int(uid.strip()) for uid in target_user_ids.split(",") if uid.strip().isdigit()]
-    
-    # Парсим scheduled_at
-    scheduled_time = None
-    if scheduled_at:
-        try:
-            # Парсим время из формы (локальное время браузера, но без timezone)
-            # Предполагаем, что это московское время (UTC+3)
-            local_time = datetime.fromisoformat(scheduled_at.replace('Z', ''))
-            # Добавляем московский часовой пояс
-            moscow_time = local_time.replace(tzinfo=MOSCOW_TZ)
-            # Конвертируем в UTC для хранения в БД
-            utc_time = moscow_time.astimezone(timezone.utc)
-            # Убираем timezone для сохранения в БД (asyncpg требует naive datetime)
-            scheduled_time = utc_time.replace(tzinfo=None)
-            # Проверяем, не в прошлом ли время (в UTC)
-            if scheduled_time <= datetime.utcnow():
-                scheduled_time = None
-        except Exception as e:
-            print(f"Ошибка парсинга времени: {e}")
-            scheduled_time = None
-    
-    # Преобразуем список в массив PostgreSQL
+
     user_ids_array = user_ids if user_ids else []
-    
-    # Если время не указано или в прошлом, ставим scheduled_at = CURRENT_TIMESTAMP
-    # Scheduler заберёт и отправит немедленно
-    if not scheduled_time:
-        scheduled_time = None  # Будет установлено в CURRENT_TIMESTAMP на стороне БД
-    
-    # Всегда создаём запись в БД со статусом 'pending'
-    # Scheduler заберёт и отправит (единый путь для всех пушей)
     photo_file_id_val = (photo_file_id or "").strip() or None
-    await AdminDatabase.execute(
+
+    row = await AdminDatabase.fetchrow(
         """INSERT INTO scheduled_pushes (message, send_to_all, target_user_ids, scheduled_at, status, photo_file_id)
-           VALUES ($1, $2, $3, COALESCE($4, CURRENT_TIMESTAMP), 'pending', $5)""",
-        message, send_to_all, user_ids_array, scheduled_time, photo_file_id_val
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 'pending', $4)
+           RETURNING *""",
+        message,
+        send_to_all,
+        user_ids_array,
+        photo_file_id_val,
     )
-    
+    await process_push(dict(row))
+
     return RedirectResponse(url="/pushes", status_code=303)
 
 

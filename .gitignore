@@ -50,6 +50,9 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+*.sql
+*.dump
+backups/
 
 # Secrets and sensitive files
 *.key
@@ -60,3 +63,5 @@ secrets/
 
 # Railway
 .railway/
+
+docs/
